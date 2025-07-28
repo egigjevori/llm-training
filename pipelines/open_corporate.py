@@ -28,7 +28,7 @@ HEADERS = {
 }
 
 
-@step
+@step(enable_cache=False)
 def get_total_pages() -> int:
     """Get the total number of pages to scrape from the search results."""
     response = requests.get(f"{SEARCH_URL}?page=1", headers=HEADERS, timeout=30)
@@ -47,7 +47,7 @@ def get_total_pages() -> int:
 
 
 
-@step
+@step(enable_cache=False)
 def scrape_company_listings(page: int) -> List[Dict]:
     """Scrape company listings from a specific page."""
     companies = []
@@ -120,7 +120,7 @@ def scrape_company_listings(page: int) -> List[Dict]:
     return companies
 
 
-@step
+@step(enable_cache=False)
 def scrape_company_details(company_summary: Dict) -> Dict:
     """Scrape detailed information for a specific company."""
     try:
@@ -305,7 +305,7 @@ def scrape_company_details(company_summary: Dict) -> Dict:
         }
 
 
-@step
+@step(enable_cache=False)
 def store_company_in_mongodb(company_detail: Dict) -> bool:
     """
     Store company details in MongoDB using NIPT as the unique identifier.
@@ -352,10 +352,10 @@ def store_company_in_mongodb(company_detail: Dict) -> bool:
         return False
 
 
-@step
+@step(enable_cache=False)
 def process_multiple_pages(total_pages: int) -> None:
     """Process multiple pages of company listings and their details."""
-    for page in range(1, min(6, total_pages + 1)):
+    for page in range(1, total_pages):
         companies = scrape_company_listings(page)
         
         # Process all companies from this page

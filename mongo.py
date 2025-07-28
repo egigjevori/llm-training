@@ -20,11 +20,9 @@ def get_mongodb_connection() -> Optional[MongoClient]:
     """
     Create a MongoDB connection using environment variables.
     
-    Environment variables (with Kubernetes defaults):
+    Environment variables (with defaults):
     - MONGO_HOST: MongoDB host (default: localhost)
     - MONGO_PORT: MongoDB port (default: 27017)
-    - MONGO_USERNAME: MongoDB username (default: admin)
-    - MONGO_PASSWORD: MongoDB password (required)
     - MONGO_DATABASE: MongoDB database name (default: admin)
     
     Returns:
@@ -34,18 +32,13 @@ def get_mongodb_connection() -> Optional[MongoClient]:
         ConnectionError: If unable to connect to MongoDB
     """
     try:
-        # Get environment variables with Kubernetes-style defaults
+        # Get environment variables with defaults
         host = os.getenv("MONGO_HOST", "localhost")
         port = int(os.getenv("MONGO_PORT", "27017"))
-        username = os.getenv("MONGO_USERNAME", "admin")
-        password = os.getenv("MONGO_PASSWORD")
         database = os.getenv("MONGO_DATABASE", "admin")
         
-        if not password:
-            raise ValueError("MONGO_PASSWORD environment variable is required")
-        
-        # Create connection string
-        connection_string = f"mongodb://{username}:{password}@{host}:{port}/{database}"
+        # Create connection string without authentication
+        connection_string = f"mongodb://{host}:{port}/{database}"
         
         # Create MongoDB client
         client = MongoClient(connection_string)

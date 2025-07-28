@@ -217,24 +217,19 @@ def store_tender_in_mongodb(tender_data: Dict) -> bool:
 
 
 @step
-def process_tenders_from_page(page_number: int = 1, max_tenders_per_page: int = 5) -> List[Dict]:
+def process_tenders_from_page(page_number: int = 1) -> List[Dict]:
     """Process tenders from a specific page by extracting data from HTML tables."""
     tender_links = get_tender_links_from_page(page_number)
     
     processed_tenders = []
-    processed_count = 0
     
     for tender_url in tender_links:
-        if processed_count >= max_tenders_per_page:
-            break
-            
         tender_data = extract_tender_data(tender_url)
         if tender_data:
             # Store tender data in MongoDB
             stored = store_tender_in_mongodb(tender_data)
             
             processed_tenders.append(tender_data)
-            processed_count += 1
             
             # Print storage status
             storage_status = "✅ Stored" if stored else "❌ Failed"
@@ -248,7 +243,7 @@ def process_tenders_from_page(page_number: int = 1, max_tenders_per_page: int = 
 
 
 @step
-def process_all_pages(max_tenders_per_page: int = 3) -> List[Dict]:
+def process_all_pages() -> List[Dict]:
     """Process tenders from all available pages until no next page is found."""
     all_tender_data = []
     current_page = 1
@@ -257,7 +252,7 @@ def process_all_pages(max_tenders_per_page: int = 3) -> List[Dict]:
         logger.info(f"Processing page {current_page}")
         try:
             # Process current page
-            page_tenders = process_tenders_from_page(current_page, max_tenders_per_page)
+            page_tenders = process_tenders_from_page(current_page)
             all_tender_data.extend(page_tenders)
             
             # Check if there's a next page
@@ -287,8 +282,8 @@ def process_all_pages(max_tenders_per_page: int = 3) -> List[Dict]:
 @pipeline
 def open_procurement_scraping_pipeline():
     """Main pipeline for scraping Open Procurement Albania website."""
-    # Process all pages until no next page is found (limiting to 3 tenders per page for efficiency)
-    all_tender_data = process_all_pages(max_tenders_per_page=3)
+    # Process all pages until no next page is found
+    all_tender_data = process_all_pages()
 
 
 if __name__ == "__main__":
