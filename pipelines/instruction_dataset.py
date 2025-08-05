@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-@step
+@step(enable_cache=False)
 def fetch_corporate_data(limit: int = 1000) -> List[Dict]:
     """Fetch corporate data from MongoDB."""
     try:
@@ -46,7 +46,7 @@ def fetch_corporate_data(limit: int = 1000) -> List[Dict]:
         return []
 
 
-@step
+@step(enable_cache=False)
 def fetch_procurement_data(limit: int = 1000) -> List[Dict]:
     """Fetch procurement data from MongoDB."""
     try:
@@ -808,7 +808,7 @@ def generate_complex_instructions(corporate_data: List[Dict], procurement_data: 
     return instructions
 
 
-@step
+@step(enable_cache=False)
 def generate_instruction_dataset(corporate_data: List[Dict], procurement_data: List[Dict]) -> List[Dict]:
     """Generate comprehensive instruction dataset from corporate and procurement data."""
     all_instructions = []
@@ -844,7 +844,7 @@ def generate_instruction_dataset(corporate_data: List[Dict], procurement_data: L
     return all_instructions
 
 
-@step
+@step(enable_cache=False)
 def save_instruction_dataset(instructions: List[Dict], output_path: str = "instruction_dataset.jsonl") -> str:
     """Save instruction dataset to JSONL file."""
     try:
@@ -863,7 +863,7 @@ def save_instruction_dataset(instructions: List[Dict], output_path: str = "instr
         return ""
 
 
-@step
+@step(enable_cache=False)
 def generate_dataset_statistics(instructions: List[Dict]) -> Dict:
     """Generate statistics about the instruction dataset."""
     stats = {
