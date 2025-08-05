@@ -87,241 +87,260 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
     """Generate instruction-response pairs from corporate data."""
     instructions = []
     
+    # Helper function to check if value is meaningful
+    def is_meaningful(value):
+        if not value or value == "Unknown" or value == "-" or value == "":
+            return False
+        return True
+    
     # Basic company information questions
-    if company.get('emri') and company.get('emri') != "Unknown":
+    if is_meaningful(company.get('emri')):
+        company_name = company.get('emri', '').strip('"')  # Remove quotes
+        nipt = company.get('nipt', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the name of the company with NIPT {company.get('nipt', 'N/A')}?",
-            "response": f"The company name is {company.get('emri')}.",
+            "instruction": f"What is the name of the company with NIPT {nipt}?",
+            "response": f"The company name is {company_name}.",
             "category": "company_info",
             "source": "corporate"
         })
         
-        instructions.append({
-            "instruction": f"Tell me about the company {company.get('emri')}.",
-            "response": f"{company.get('emri')} is a company registered in Albania with NIPT {company.get('nipt', 'N/A')}. {company.get('përshkrimi', '')}",
-            "category": "company_description",
-            "source": "corporate"
-        })
+        # Company description
+        description = company.get('përshkrimi', '')
+        if is_meaningful(description):
+            instructions.append({
+                "instruction": f"Tell me about the company {company_name}.",
+                "response": f"{company_name} is a company registered in Albania with NIPT {nipt}. {description}",
+                "category": "company_description",
+                "source": "corporate"
+            })
         
-        # Company summary instruction
+        # Company summary with available data
+        location = company.get('vendndodhja', 'Unknown location')
+        reg_date = company.get('data_regjistrimit', 'Unknown date')
+        status = company.get('statusi', 'Unknown')
+        legal_form = company.get('forma_ligjore', 'Unknown')
+        
+        summary_parts = [f"{company_name} is a company registered in Albania with NIPT {nipt}"]
+        if is_meaningful(location):
+            summary_parts.append(f"located in {location}")
+        if is_meaningful(reg_date):
+            summary_parts.append(f"registered on {reg_date}")
+        if is_meaningful(status):
+            summary_parts.append(f"with status {status}")
+        if is_meaningful(legal_form):
+            summary_parts.append(f"and legal form {legal_form}")
+        if is_meaningful(description):
+            summary_parts.append(description)
+        
         instructions.append({
-            "instruction": f"Provide a summary of {company.get('emri')} including key details.",
-            "response": f"{company.get('emri')} is a company registered in Albania with NIPT {company.get('nipt', 'N/A')}. It is located in {company.get('vendndodhja', 'Unknown location')} and was registered on {company.get('data_regjistrimit', 'Unknown date')}. The company's status is {company.get('statusi', 'Unknown')} and its legal form is {company.get('forma_ligjore', 'Unknown')}. {company.get('përshkrimi', '')}",
+            "instruction": f"Provide a summary of {company_name} including key details.",
+            "response": ". ".join(summary_parts) + ".",
             "category": "company_summary",
             "source": "corporate"
         })
     
     # Location-based questions
-    if company.get('vendndodhja') and company.get('vendndodhja') != "Unknown":
+    if is_meaningful(company.get('vendndodhja')):
+        location = company.get('vendndodhja')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"Where is {company.get('emri', 'this company')} located?",
-            "response": f"{company.get('emri', 'The company')} is located in {company.get('vendndodhja')}.",
+            "instruction": f"Where is {company_name} located?",
+            "response": f"{company_name} is located in {location}.",
             "category": "location",
             "source": "corporate"
         })
         
-        # Location-based search instruction
         instructions.append({
-            "instruction": f"Find companies located in {company.get('vendndodhja')}.",
-            "response": f"To find companies located in {company.get('vendndodhja')}, you would search the corporate database for companies with location field matching '{company.get('vendndodhja')}'. {company.get('emri', 'This company')} is one such company located there.",
+            "instruction": f"Find companies located in {location}.",
+            "response": f"To find companies located in {location}, you would search the corporate database for companies with location field matching '{location}'.",
             "category": "search_query",
             "source": "corporate"
         })
     
     # Registration date questions
-    if company.get('data_regjistrimit') and company.get('data_regjistrimit') != "Unknown":
+    if is_meaningful(company.get('data_regjistrimit')):
+        reg_date = company.get('data_regjistrimit')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"When was {company.get('emri', 'this company')} registered?",
-            "response": f"{company.get('emri', 'The company')} was registered on {company.get('data_regjistrimit')}.",
+            "instruction": f"When was {company_name} registered?",
+            "response": f"{company_name} was registered on {reg_date}.",
             "category": "registration",
             "source": "corporate"
         })
         
-        # Age calculation instruction
         instructions.append({
-            "instruction": f"How old is {company.get('emri', 'this company')}?",
-            "response": f"To determine the age of {company.get('emri', 'the company')}, you would calculate the difference between the current date and the registration date {company.get('data_regjistrimit')}.",
+            "instruction": f"How old is {company_name}?",
+            "response": f"To determine the age of {company_name}, you would calculate the difference between the current date and the registration date {reg_date}.",
             "category": "calculation",
             "source": "corporate"
         })
     
     # Status questions
-    if company.get('statusi') and company.get('statusi') != "Unknown":
+    if is_meaningful(company.get('statusi')):
+        status = company.get('statusi')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What is the current status of {company.get('emri', 'this company')}?",
-            "response": f"The current status of {company.get('emri', 'the company')} is {company.get('statusi')}.",
+            "instruction": f"What is the current status of {company_name}?",
+            "response": f"The current status of {company_name} is {status}.",
             "category": "status",
             "source": "corporate"
         })
         
-        # Status filter instruction
         instructions.append({
-            "instruction": f"Show me all companies with status '{company.get('statusi')}'.",
-            "response": f"To find all companies with status '{company.get('statusi')}', you would filter the corporate database by status field. {company.get('emri', 'This company')} is one example with this status.",
+            "instruction": f"Show me all companies with status '{status}'.",
+            "response": f"To find all companies with status '{status}', you would filter the corporate database by status field.",
             "category": "filter_query",
             "source": "corporate"
         })
     
     # Legal form questions
-    if company.get('forma_ligjore') and company.get('forma_ligjore') != "Unknown":
+    if is_meaningful(company.get('forma_ligjore')):
+        legal_form = company.get('forma_ligjore')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What is the legal form of {company.get('emri', 'this company')}?",
-            "response": f"The legal form of {company.get('emri', 'the company')} is {company.get('forma_ligjore')}.",
+            "instruction": f"What is the legal form of {company_name}?",
+            "response": f"The legal form of {company_name} is {legal_form}.",
             "category": "legal_form",
             "source": "corporate"
         })
         
-        # Legal form comparison instruction
         instructions.append({
-            "instruction": f"Compare {company.get('emri', 'this company')} with other companies of the same legal form.",
-            "response": f"To compare {company.get('emri', 'the company')} with other companies of the same legal form ({company.get('forma_ligjore')}), you would filter the database by legal form and analyze similarities in capital, location, and business activities.",
+            "instruction": f"Compare {company_name} with other companies of the same legal form.",
+            "response": f"To compare {company_name} with other companies of the same legal form ({legal_form}), you would filter the database by legal form and analyze similarities in capital, location, and business activities.",
             "category": "comparison_analysis",
             "source": "corporate"
         })
     
     # Capital questions
-    if company.get('kapitali') and company.get('kapitali') != "Unknown":
+    if is_meaningful(company.get('kapitali')):
+        capital = company.get('kapitali')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What is the capital of {company.get('emri', 'this company')}?",
-            "response": f"The capital of {company.get('emri', 'the company')} is {company.get('kapitali')}.",
+            "instruction": f"What is the capital of {company_name}?",
+            "response": f"The capital of {company_name} is {capital}.",
             "category": "capital",
             "source": "corporate"
         })
         
-        # Capital range instruction
         instructions.append({
-            "instruction": f"Find companies with capital similar to {company.get('emri', 'this company')}.",
-            "response": f"To find companies with similar capital to {company.get('emri', 'the company')} ({company.get('kapitali')}), you would search the database for companies within a similar capital range or category.",
+            "instruction": f"Find companies with capital similar to {company_name}.",
+            "response": f"To find companies with similar capital to {company_name} ({capital}), you would search the database for companies within a similar capital range or category.",
             "category": "range_query",
             "source": "corporate"
         })
     
-    # Contact information questions
-    if company.get('telefoni') and company.get('telefoni') != "Unknown":
-        instructions.append({
-            "instruction": f"What is the phone number of {company.get('emri', 'this company')}?",
-            "response": f"The phone number of {company.get('emri', 'the company')} is {company.get('telefoni')}.",
-            "category": "contact",
-            "source": "corporate"
-        })
-    
-    if company.get('email') and company.get('email') != "Unknown":
-        instructions.append({
-            "instruction": f"What is the email address of {company.get('emri', 'this company')}?",
-            "response": f"The email address of {company.get('emri', 'the company')} is {company.get('email')}.",
-            "category": "contact",
-            "source": "corporate"
-        })
-        
-        # Contact verification instruction
-        instructions.append({
-            "instruction": f"Verify the contact information for {company.get('emri', 'this company')}.",
-            "response": f"To verify contact information for {company.get('emri', 'the company')}, check the phone number: {company.get('telefoni', 'Not available')}, email: {company.get('email', 'Not available')}, and address: {company.get('adresa', 'Not available')}.",
-            "category": "verification",
-            "source": "corporate"
-        })
-    
     # Address questions
-    if company.get('adresa') and company.get('adresa') != "Unknown":
+    if is_meaningful(company.get('adresa')):
+        address = company.get('adresa')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What is the address of {company.get('emri', 'this company')}?",
-            "response": f"The address of {company.get('emri', 'the company')} is {company.get('adresa')}.",
+            "instruction": f"What is the address of {company_name}?",
+            "response": f"The address of {company_name} is {address}.",
             "category": "address",
             "source": "corporate"
         })
         
-        # Geographic analysis instruction
         instructions.append({
-            "instruction": f"Analyze the geographic distribution of companies in the same area as {company.get('emri', 'this company')}.",
-            "response": f"To analyze geographic distribution around {company.get('emri', 'the company')} located at {company.get('adresa', 'Unknown address')}, you would search for companies in the same district or area and analyze their business activities and legal forms.",
+            "instruction": f"Analyze the geographic distribution of companies in the same area as {company_name}.",
+            "response": f"To analyze geographic distribution around {company_name} located at {address}, you would search for companies in the same district or area and analyze their business activities and legal forms.",
             "category": "geographic_analysis",
             "source": "corporate"
         })
     
     # Business activity questions
-    if company.get('objekti_veprimtarisë') and company.get('objekti_veprimtarisë') != "Unknown":
+    if is_meaningful(company.get('objekti_veprimtarisë')):
+        business_activity = company.get('objekti_veprimtarisë')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What is the business activity of {company.get('emri', 'this company')}?",
-            "response": f"The business activity of {company.get('emri', 'the company')} is: {company.get('objekti_veprimtarisë')}.",
+            "instruction": f"What is the business activity of {company_name}?",
+            "response": f"The business activity of {company_name} is: {business_activity}.",
             "category": "business_activity",
             "source": "corporate"
         })
         
-        # Industry analysis instruction
         instructions.append({
-            "instruction": f"Find companies in the same industry as {company.get('emri', 'this company')}.",
-            "response": f"To find companies in the same industry as {company.get('emri', 'the company')} which operates in {company.get('objekti_veprimtarisë', 'Unknown industry')}, you would search the database for companies with similar business activity descriptions.",
+            "instruction": f"Find companies in the same industry as {company_name}.",
+            "response": f"To find companies in the same industry as {company_name} which operates in {business_activity}, you would search the database for companies with similar business activity descriptions.",
             "category": "industry_search",
             "source": "corporate"
         })
         
-        # Business activity classification instruction
         instructions.append({
-            "instruction": f"Classify the business activity of {company.get('emri', 'this company')} into a standard industry category.",
-            "response": f"Based on the business activity '{company.get('objekti_veprimtarisë', 'Unknown')}', {company.get('emri', 'the company')} would be classified into the appropriate industry category based on the nature of their operations.",
+            "instruction": f"Classify the business activity of {company_name} into a standard industry category.",
+            "response": f"Based on the business activity '{business_activity}', {company_name} would be classified into the appropriate industry category based on the nature of their operations.",
             "category": "classification",
             "source": "corporate"
         })
     
     # Administrator questions
-    if company.get('administratorët') and company.get('administratorët'):
-        admin_list = ", ".join(company.get('administratorët', []))
+    if company.get('administratorët') and len(company.get('administratorët', [])) > 0:
+        admins = company.get('administratorët', [])
+        admin_list = ", ".join(admins)
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"Who are the administrators of {company.get('emri', 'this company')}?",
-            "response": f"The administrators of {company.get('emri', 'the company')} are: {admin_list}.",
+            "instruction": f"Who are the administrators of {company_name}?",
+            "response": f"The administrators of {company_name} are: {admin_list}.",
             "category": "management",
             "source": "corporate"
         })
         
-        # Management network instruction
         instructions.append({
-            "instruction": f"Find other companies managed by the same administrators as {company.get('emri', 'this company')}.",
-            "response": f"To find other companies managed by the same administrators ({admin_list}) as {company.get('emri', 'the company')}, you would search the database for companies with matching administrator names.",
+            "instruction": f"Find other companies managed by the same administrators as {company_name}.",
+            "response": f"To find other companies managed by the same administrators ({admin_list}) as {company_name}, you would search the database for companies with matching administrator names.",
             "category": "network_analysis",
             "source": "corporate"
         })
     
     # Shareholder questions
-    if company.get('zotëruesit') and company.get('zotëruesit'):
-        shareholder_list = ", ".join(company.get('zotëruesit', []))
+    if company.get('zotëruesit') and len(company.get('zotëruesit', [])) > 0:
+        shareholders = company.get('zotëruesit', [])
+        shareholder_list = ", ".join(shareholders)
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"Who are the shareholders of {company.get('emri', 'this company')}?",
-            "response": f"The shareholders of {company.get('emri', 'the company')} are: {shareholder_list}.",
+            "instruction": f"Who are the shareholders of {company_name}?",
+            "response": f"The shareholders of {company_name} are: {shareholder_list}.",
             "category": "ownership",
             "source": "corporate"
         })
         
-        # Ownership network instruction
         instructions.append({
-            "instruction": f"Analyze the ownership network for {company.get('emri', 'this company')}.",
-            "response": f"To analyze the ownership network for {company.get('emri', 'the company')}, you would examine the shareholders ({shareholder_list}) and potentially find other companies where these same individuals or entities are shareholders.",
+            "instruction": f"Analyze the ownership network for {company_name}.",
+            "response": f"To analyze the ownership network for {company_name}, you would examine the shareholders ({shareholder_list}) and potentially find other companies where these same individuals or entities are shareholders.",
             "category": "network_analysis",
             "source": "corporate"
         })
     
-    # Financial information questions
-    if company.get('informacione_financiare') and company.get('informacione_financiare'):
-        instructions.append({
-            "instruction": f"What are the financial details for {company.get('emri', 'this company')}?",
-            "response": f"The financial information for {company.get('emri', 'the company')} includes: {json.dumps(company.get('informacione_financiare', {}), ensure_ascii=False)}.",
-            "category": "financial_analysis",
-            "source": "corporate"
-        })
+    # Currency information
+    if is_meaningful(company.get('monedha')):
+        currency = company.get('monedha')
+        company_name = company.get('emri', 'this company').strip('"')
         
-        # Financial trend instruction
         instructions.append({
-            "instruction": f"Analyze the financial trends for {company.get('emri', 'this company')} over the years.",
-            "response": f"To analyze financial trends for {company.get('emri', 'the company')}, you would examine the financial data across different years: {json.dumps(company.get('informacione_financiare', {}), ensure_ascii=False)} and identify patterns in revenue, profit, or other financial metrics.",
-            "category": "trend_analysis",
+            "instruction": f"What currency does {company_name} use?",
+            "response": f"{company_name} uses {currency} as its currency.",
+            "category": "financial_info",
             "source": "corporate"
         })
     
-    # Document analysis instructions
-    if company.get('dokumenta_financiare') and company.get('dokumenta_financiare'):
+    # District information
+    if is_meaningful(company.get('rrethi')):
+        district = company.get('rrethi')
+        company_name = company.get('emri', 'this company').strip('"')
+        
         instructions.append({
-            "instruction": f"What financial documents are available for {company.get('emri', 'this company')}?",
-            "response": f"The following financial documents are available for {company.get('emri', 'the company')}: {company.get('dokumenta_financiare')}.",
-            "category": "document_analysis",
+            "instruction": f"In which district is {company_name} located?",
+            "response": f"{company_name} is located in the district of {district}.",
+            "category": "geographic_info",
             "source": "corporate"
         })
     
@@ -332,204 +351,263 @@ def generate_procurement_instructions(tender: Dict) -> List[Dict]:
     """Generate instruction-response pairs from procurement data."""
     instructions = []
     
-    # Basic tender information
-    if tender.get('tender_id'):
-        instructions.append({
-            "instruction": f"What is tender ID {tender.get('tender_id')} about?",
-            "response": f"Tender ID {tender.get('tender_id')} is about: {tender.get('Titulli i tenderit', 'N/A')}",
-            "category": "tender_info",
-            "source": "procurement"
-        })
-        
-        # Tender summary instruction
-        instructions.append({
-            "instruction": f"Provide a comprehensive summary of tender {tender.get('tender_id')}.",
-            "response": f"Tender {tender.get('tender_id')} is titled '{tender.get('Titulli i tenderit', 'N/A')}' with a value of {tender.get('Vlera e tenderit', 'N/A')}. It is managed by {tender.get('Autoriteti kontraktues', 'N/A')} and has a submission deadline of {tender.get('Afati i dorëzimit', 'N/A')}. The tender status is {tender.get('Statusi', 'N/A')} and it is a {tender.get('Lloji i tenderit', 'N/A')} using {tender.get('Lloji i procedurës', 'N/A')} procedure.",
-            "category": "tender_summary",
-            "source": "procurement"
-        })
+    # Helper function to check if value is meaningful
+    def is_meaningful(value):
+        if not value or value == "Unknown" or value == "-" or value == "":
+            return False
+        return True
     
-    # Tender title questions
-    if tender.get('Titulli i tenderit') and tender.get('Titulli i tenderit') != "Unknown":
+    # Basic tender information
+    if is_meaningful(tender.get('tender_id')):
+        tender_id = tender.get('tender_id')
+        
+        # Tender object information
+        tender_object = tender.get('Objekti i Tenderit', '')
+        if is_meaningful(tender_object):
+            instructions.append({
+                "instruction": f"What is tender ID {tender_id} about?",
+                "response": f"Tender ID {tender_id} is about: {tender_object}",
+                "category": "tender_info",
+                "source": "procurement"
+            })
+        
+        # Tender summary with available data
+        summary_parts = [f"Tender {tender_id}"]
+        
+        if is_meaningful(tender_object):
+            summary_parts.append(f"is about {tender_object}")
+        
+        value = tender.get('Vlera / Fondi Limit', '')
+        if is_meaningful(value):
+            summary_parts.append(f"with a value of {value}")
+        
+        authority = tender.get('Autoritet Prokurues', '')
+        if is_meaningful(authority):
+            summary_parts.append(f"managed by {authority}")
+        
+        deadline = tender.get('Data e fundit per dorezimin e Dokumenteve', '')
+        if is_meaningful(deadline):
+            summary_parts.append(f"with submission deadline of {deadline}")
+        
+        status = tender.get('Statusi i Tenderit', '')
+        if is_meaningful(status):
+            summary_parts.append(f"and status {status}")
+        
+        contract_type = tender.get('Lloji i Kontrates Publike', '')
+        if is_meaningful(contract_type):
+            summary_parts.append(f"for {contract_type}")
+        
+        procedure = tender.get('Lloji i Procedures', '')
+        if is_meaningful(procedure):
+            summary_parts.append(f"using {procedure}")
+        
+        if len(summary_parts) > 1:
+            instructions.append({
+                "instruction": f"Provide a comprehensive summary of tender {tender_id}.",
+                "response": ". ".join(summary_parts) + ".",
+                "category": "tender_summary",
+                "source": "procurement"
+            })
+    
+    # Tender object questions
+    if is_meaningful(tender.get('Objekti i Tenderit')):
+        tender_object = tender.get('Objekti i Tenderit')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the title of tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The title of tender {tender.get('tender_id', 'N/A')} is: {tender.get('Titulli i tenderit')}",
-            "category": "tender_title",
+            "instruction": f"What is the object of tender {tender_id}?",
+            "response": f"The object of tender {tender_id} is: {tender_object}",
+            "category": "tender_object",
             "source": "procurement"
         })
         
-        # Title-based search instruction
         instructions.append({
-            "instruction": f"Find tenders with similar titles to '{tender.get('Titulli i tenderit')}'.",
-            "response": f"To find tenders with similar titles to '{tender.get('Titulli i tenderit')}', you would search the procurement database for tenders containing similar keywords or phrases in their titles.",
+            "instruction": f"Find tenders with similar objects to '{tender_object}'.",
+            "response": f"To find tenders with similar objects to '{tender_object}', you would search the procurement database for tenders containing similar keywords or phrases in their object descriptions.",
             "category": "similarity_search",
             "source": "procurement"
         })
     
     # Contracting authority questions
-    if tender.get('Autoriteti kontraktues') and tender.get('Autoriteti kontraktues') != "Unknown":
+    if is_meaningful(tender.get('Autoritet Prokurues')):
+        authority = tender.get('Autoritet Prokurues')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"Who is the contracting authority for tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The contracting authority for tender {tender.get('tender_id', 'N/A')} is {tender.get('Autoriteti kontraktues')}.",
+            "instruction": f"Who is the contracting authority for tender {tender_id}?",
+            "response": f"The contracting authority for tender {tender_id} is {authority}.",
             "category": "contracting_authority",
             "source": "procurement"
         })
         
-        # Authority analysis instruction
         instructions.append({
-            "instruction": f"Find all tenders issued by {tender.get('Autoriteti kontraktues')}.",
-            "response": f"To find all tenders issued by {tender.get('Autoriteti kontraktues')}, you would filter the procurement database by contracting authority field to see all tenders managed by this entity.",
+            "instruction": f"Find all tenders issued by {authority}.",
+            "response": f"To find all tenders issued by {authority}, you would filter the procurement database by contracting authority field to see all tenders managed by this entity.",
             "category": "authority_analysis",
             "source": "procurement"
         })
         
-        # Authority performance instruction
         instructions.append({
-            "instruction": f"Analyze the procurement performance of {tender.get('Autoriteti kontraktues')}.",
-            "response": f"To analyze the procurement performance of {tender.get('Autoriteti kontraktues')}, you would examine all tenders issued by this authority, their values, success rates, and compliance with procurement regulations.",
+            "instruction": f"Analyze the procurement performance of {authority}.",
+            "response": f"To analyze the procurement performance of {authority}, you would examine all tenders issued by this authority, their values, success rates, and compliance with procurement regulations.",
             "category": "performance_analysis",
             "source": "procurement"
         })
     
     # Tender value questions
-    if tender.get('Vlera e tenderit') and tender.get('Vlera e tenderit') != "Unknown":
+    if is_meaningful(tender.get('Vlera / Fondi Limit')):
+        value = tender.get('Vlera / Fondi Limit')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the value of tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The value of tender {tender.get('tender_id', 'N/A')} is {tender.get('Vlera e tenderit')}.",
+            "instruction": f"What is the value of tender {tender_id}?",
+            "response": f"The value of tender {tender_id} is {value}.",
             "category": "tender_value",
             "source": "procurement"
         })
         
-        # Value range instruction
         instructions.append({
-            "instruction": f"Find tenders with values similar to {tender.get('tender_id', 'N/A')}.",
-            "response": f"To find tenders with similar values to {tender.get('Vlera e tenderit')}, you would search the procurement database for tenders within a similar value range or category.",
+            "instruction": f"Find tenders with values similar to {tender_id}.",
+            "response": f"To find tenders with similar values to {value}, you would search the procurement database for tenders within a similar value range or category.",
             "category": "value_range_search",
             "source": "procurement"
         })
         
-        # Budget analysis instruction
         instructions.append({
-            "instruction": f"Analyze the budget allocation for tenders in the same category as {tender.get('tender_id', 'N/A')}.",
-            "response": f"To analyze budget allocation for tenders similar to {tender.get('tender_id', 'N/A')} with value {tender.get('Vlera e tenderit')}, you would examine the distribution of tender values in the same category or sector.",
+            "instruction": f"Analyze the budget allocation for tenders in the same category as {tender_id}.",
+            "response": f"To analyze budget allocation for tenders similar to {tender_id} with value {value}, you would examine the distribution of tender values in the same category or sector.",
             "category": "budget_analysis",
             "source": "procurement"
         })
     
     # Submission deadline questions
-    if tender.get('Afati i dorëzimit') and tender.get('Afati i dorëzimit') != "Unknown":
+    if is_meaningful(tender.get('Data e fundit per dorezimin e Dokumenteve')):
+        deadline = tender.get('Data e fundit per dorezimin e Dokumenteve')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the submission deadline for tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The submission deadline for tender {tender.get('tender_id', 'N/A')} is {tender.get('Afati i dorëzimit')}.",
+            "instruction": f"What is the submission deadline for tender {tender_id}?",
+            "response": f"The submission deadline for tender {tender_id} is {deadline}.",
             "category": "deadline",
             "source": "procurement"
         })
         
-        # Urgency analysis instruction
         instructions.append({
-            "instruction": f"Calculate how many days are left until the deadline for tender {tender.get('tender_id', 'N/A')}.",
-            "response": f"To calculate the remaining days until the deadline for tender {tender.get('tender_id', 'N/A')} with deadline {tender.get('Afati i dorëzimit')}, you would subtract the current date from the deadline date.",
+            "instruction": f"Calculate how many days are left until the deadline for tender {tender_id}.",
+            "response": f"To calculate the remaining days until the deadline for tender {tender_id} with deadline {deadline}, you would subtract the current date from the deadline date.",
             "category": "urgency_calculation",
-            "source": "procurement"
-        })
-        
-        # Deadline extension instruction
-        instructions.append({
-            "instruction": f"Check if tender {tender.get('tender_id', 'N/A')} has had any deadline extensions.",
-            "response": f"To check for deadline extensions for tender {tender.get('tender_id', 'N/A')}, you would examine the tender's modification history and compare the original deadline with any updated deadlines.",
-            "category": "modification_check",
             "source": "procurement"
         })
     
     # Tender status questions
-    if tender.get('Statusi') and tender.get('Statusi') != "Unknown":
+    if is_meaningful(tender.get('Statusi i Tenderit')):
+        status = tender.get('Statusi i Tenderit')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the status of tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The status of tender {tender.get('tender_id', 'N/A')} is {tender.get('Statusi')}.",
+            "instruction": f"What is the status of tender {tender_id}?",
+            "response": f"The status of tender {tender_id} is {status}.",
             "category": "tender_status",
             "source": "procurement"
         })
         
-        # Status filter instruction
         instructions.append({
-            "instruction": f"Show me all tenders with status '{tender.get('Statusi')}'.",
-            "response": f"To find all tenders with status '{tender.get('Statusi')}', you would filter the procurement database by status field. Tender {tender.get('tender_id', 'N/A')} is one example with this status.",
+            "instruction": f"Show me all tenders with status '{status}'.",
+            "response": f"To find all tenders with status '{status}', you would filter the procurement database by status field.",
             "category": "status_filter",
             "source": "procurement"
         })
         
-        # Status transition instruction
         instructions.append({
-            "instruction": f"Track the status changes for tender {tender.get('tender_id', 'N/A')}.",
-            "response": f"To track status changes for tender {tender.get('tender_id', 'N/A')}, you would examine the tender's modification history to see how the status has evolved from initial publication to the current status of {tender.get('Statusi')}.",
+            "instruction": f"Track the status changes for tender {tender_id}.",
+            "response": f"To track status changes for tender {tender_id}, you would examine the tender's modification history to see how the status has evolved from initial publication to the current status of {status}.",
             "category": "status_tracking",
             "source": "procurement"
         })
     
-    # Tender type questions
-    if tender.get('Lloji i tenderit') and tender.get('Lloji i tenderit') != "Unknown":
+    # Contract type questions
+    if is_meaningful(tender.get('Lloji i Kontrates Publike')):
+        contract_type = tender.get('Lloji i Kontrates Publike')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What type of tender is {tender.get('tender_id', 'N/A')}?",
-            "response": f"Tender {tender.get('tender_id', 'N/A')} is a {tender.get('Lloji i tenderit')}.",
-            "category": "tender_type",
+            "instruction": f"What type of contract is tender {tender_id}?",
+            "response": f"Tender {tender_id} is for {contract_type}.",
+            "category": "contract_type",
             "source": "procurement"
         })
         
-        # Type comparison instruction
         instructions.append({
-            "instruction": f"Compare {tender.get('Lloji i tenderit')} tenders with other tender types.",
-            "response": f"To compare {tender.get('Lloji i tenderit')} tenders with other types, you would analyze differences in procedures, requirements, evaluation criteria, and typical values between different tender categories.",
+            "instruction": f"Compare {contract_type} tenders with other contract types.",
+            "response": f"To compare {contract_type} tenders with other types, you would analyze differences in procedures, requirements, evaluation criteria, and typical values between different contract categories.",
             "category": "type_comparison",
             "source": "procurement"
         })
     
     # Procedure type questions
-    if tender.get('Lloji i procedurës') and tender.get('Lloji i procedurës') != "Unknown":
+    if is_meaningful(tender.get('Lloji i Procedures')):
+        procedure = tender.get('Lloji i Procedures')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"What is the procedure type for tender {tender.get('tender_id', 'N/A')}?",
-            "response": f"The procedure type for tender {tender.get('tender_id', 'N/A')} is {tender.get('Lloji i procedurës')}.",
+            "instruction": f"What is the procedure type for tender {tender_id}?",
+            "response": f"The procedure type for tender {tender_id} is {procedure}.",
             "category": "procedure_type",
             "source": "procurement"
         })
         
-        # Procedure analysis instruction
         instructions.append({
-            "instruction": f"Explain the {tender.get('Lloji i procedurës')} procedure for tender {tender.get('tender_id', 'N/A')}.",
-            "response": f"The {tender.get('Lloji i procedurës')} procedure for tender {tender.get('tender_id', 'N/A')} involves specific steps, evaluation criteria, and timeline requirements as defined by Albanian procurement regulations.",
+            "instruction": f"Explain the {procedure} procedure for tender {tender_id}.",
+            "response": f"The {procedure} procedure for tender {tender_id} involves specific steps, evaluation criteria, and timeline requirements as defined by Albanian procurement regulations.",
             "category": "procedure_explanation",
             "source": "procurement"
         })
     
-    # Additional tender fields
-    if tender.get('Kategoria') and tender.get('Kategoria') != "Unknown":
-        instructions.append({
-            "instruction": f"What category does tender {tender.get('tender_id', 'N/A')} belong to?",
-            "response": f"Tender {tender.get('tender_id', 'N/A')} belongs to the category: {tender.get('Kategoria')}.",
-            "category": "tender_category",
-            "source": "procurement"
-        })
+    # Contract duration
+    if is_meaningful(tender.get('Kohezgjatja e kontrates')):
+        duration = tender.get('Kohezgjatja e kontrates')
+        tender_id = tender.get('tender_id', 'N/A')
         
-        # Category analysis instruction
         instructions.append({
-            "instruction": f"Analyze tenders in the {tender.get('Kategoria')} category.",
-            "response": f"To analyze tenders in the {tender.get('Kategoria')} category, you would examine all tenders in this category to understand typical values, contracting authorities, and success patterns.",
-            "category": "category_analysis",
+            "instruction": f"What is the contract duration for tender {tender_id}?",
+            "response": f"The contract duration for tender {tender_id} is {duration}.",
+            "category": "contract_duration",
             "source": "procurement"
         })
     
-    if tender.get('Vendndodhja') and tender.get('Vendndodhja') != "Unknown":
+    # Winning offer
+    if is_meaningful(tender.get('Oferta fituese  Leke pa TVSH')):
+        winning_offer = tender.get('Oferta fituese  Leke pa TVSH')
+        tender_id = tender.get('tender_id', 'N/A')
+        
         instructions.append({
-            "instruction": f"Where is tender {tender.get('tender_id', 'N/A')} located?",
-            "response": f"Tender {tender.get('tender_id', 'N/A')} is located in {tender.get('Vendndodhja')}.",
-            "category": "tender_location",
+            "instruction": f"What was the winning offer for tender {tender_id}?",
+            "response": f"The winning offer for tender {tender_id} was {winning_offer} Leke without VAT.",
+            "category": "winning_offer",
             "source": "procurement"
         })
+    
+    # Contracting economic operator
+    if is_meaningful(tender.get('Operator Ekonomik Kontraktues')):
+        operator = tender.get('Operator Ekonomik Kontraktues')
+        tender_id = tender.get('tender_id', 'N/A')
         
-        # Geographic analysis instruction
         instructions.append({
-            "instruction": f"Find tenders in the same location as {tender.get('tender_id', 'N/A')}.",
-            "response": f"To find tenders in the same location as {tender.get('tender_id', 'N/A')} ({tender.get('Vendndodhja', 'N/A')}), you would filter the procurement database by location field.",
-            "category": "geographic_search",
+            "instruction": f"Who is the contracting economic operator for tender {tender_id}?",
+            "response": f"The contracting economic operator for tender {tender_id} is {operator}.",
+            "category": "contracting_operator",
+            "source": "procurement"
+        })
+    
+    # Number of competing operators
+    if is_meaningful(tender.get('Nr', {}).get(' i Operatoreve Konkurues')):
+        num_operators = tender.get('Nr', {}).get(' i Operatoreve Konkurues')
+        tender_id = tender.get('tender_id', 'N/A')
+        
+        instructions.append({
+            "instruction": f"How many operators competed for tender {tender_id}?",
+            "response": f"{num_operators} operators competed for tender {tender_id}.",
+            "category": "competition_analysis",
             "source": "procurement"
         })
     
