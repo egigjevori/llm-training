@@ -39,7 +39,9 @@ def has_next_page(page_number: int) -> bool:
         response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Set proper encoding for Albanian text
+        response.encoding = response.apparent_encoding or 'utf-8'
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         # Look for the "me pas >" text and check if it has a link
         next_links = soup.find_all('a', string=re.compile(r'me pas', re.IGNORECASE))
@@ -78,7 +80,9 @@ def get_tender_links_from_page(page_number: int = 1) -> List[str]:
         response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Set proper encoding for Albanian text
+        response.encoding = response.apparent_encoding or 'utf-8'
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         # Find all tender links that match the pattern /sq/tender/view/id/{id}
         tender_links = []
@@ -110,7 +114,8 @@ def extract_tender_data(tender_url: str) -> Optional[Dict]:
         response = requests.get(tender_url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         
-        soup = BeautifulSoup(response.content, 'html.parser')
+        # Set proper encoding for Albanian text
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         # Find the results_table which contains the tender data
         results_table = soup.find('table', id='results_table')
@@ -126,12 +131,13 @@ def extract_tender_data(tender_url: str) -> Optional[Dict]:
         for row in rows:
             cells = row.find_all(['td', 'th'])
             if len(cells) >= 2:
-                key = cells[0].get_text(strip=True)
-                value = cells[1].get_text(strip=True)
+                key = cells[0].get_text()
+                value = cells[1].get_text()
                 
-                # Clean up the data
-                key = key.replace('\n', ' ').replace('\r', ' ').strip()
-                value = value.replace('\n', ' ').replace('\r', ' ').strip()
+                # Clean up the data - preserve newlines but normalize whitespace
+                # Replace multiple spaces with single space, but keep newlines
+                key = re.sub(r'[ \t]+', ' ', key).strip()
+                value = re.sub(r'[ \t]+', ' ', value).strip()
                 
                 if key and value:
                     tender_data[key] = value
@@ -211,9 +217,6 @@ def store_tender_in_mongodb(tender_data: Dict) -> bool:
     except Exception as e:
         logger.error(f"Error storing tender with ID {tender_data.get('tender_id', 'Unknown')} in MongoDB: {e}")
         return False
-
-
-
 
 
 @step
