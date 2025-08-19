@@ -159,22 +159,17 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> bool:
 
 
 @step
-def process_corporate_data(batch_size: int = 100, max_documents: int = 1000) -> bool:
+def process_corporate_data(batch_size: int = 100) -> bool:
     """Process corporate data in batches."""
     skip = 0
     total_processed = 0
     
-    while total_processed < max_documents:
+    while True:
         # Fetch batch
         documents = fetch_batch_from_mongo("opencorporates_albania", "companies", batch_size, skip)
         
         if not documents:
             break
-        
-        # Limit documents to not exceed max_documents
-        remaining = max_documents - total_processed
-        if len(documents) > remaining:
-            documents = documents[:remaining]
         
         # Process batch: chunk -> embed -> store
         chunks = [create_corporate_chunk(doc) for doc in documents]
@@ -184,11 +179,6 @@ def process_corporate_data(batch_size: int = 100, max_documents: int = 1000) -> 
         if success:
             total_processed += len(documents)
             logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
-        
-        # Stop if we've reached the limit
-        if total_processed >= max_documents:
-            logger.info(f"Reached limit of {max_documents} documents for corporate_data")
-            break
             
         skip += batch_size
     
@@ -197,22 +187,17 @@ def process_corporate_data(batch_size: int = 100, max_documents: int = 1000) -> 
 
 
 @step
-def process_procurement_data(batch_size: int = 100, max_documents: int = 1000) -> bool:
+def process_procurement_data(batch_size: int = 100) -> bool:
     """Process procurement data in batches."""
     skip = 0
     total_processed = 0
     
-    while total_processed < max_documents:
+    while True:
         # Fetch batch
         documents = fetch_batch_from_mongo("openprocurement_albania", "tenders", batch_size, skip)
         
         if not documents:
             break
-        
-        # Limit documents to not exceed max_documents
-        remaining = max_documents - total_processed
-        if len(documents) > remaining:
-            documents = documents[:remaining]
         
         # Process batch: chunk -> embed -> store
         chunks = [create_procurement_chunk(doc) for doc in documents]
@@ -222,11 +207,6 @@ def process_procurement_data(batch_size: int = 100, max_documents: int = 1000) -
         if success:
             total_processed += len(documents)
             logger.info(f"Processed procurement_data batch. Total so far: {total_processed}")
-        
-        # Stop if we've reached the limit
-        if total_processed >= max_documents:
-            logger.info(f"Reached limit of {max_documents} documents for procurement_data")
-            break
             
         skip += batch_size
     
@@ -236,18 +216,15 @@ def process_procurement_data(batch_size: int = 100, max_documents: int = 1000) -
 
 @pipeline
 def rag_pipeline():
-    """Simple RAG pipeline: MongoDB -> Chunking -> Embedding -> Qdrant
-    
-    Note: Limited to 1000 documents per collection for quick testing.
-    """
+    """Simple RAG pipeline: MongoDB -> Chunking -> Embedding -> Qdrant"""
     # Initialize Qdrant
     initialize_qdrant()
     
-    # Process corporate data (limited to 1000 docs for testing)
-    process_corporate_data(max_documents=1000)
+    # Process corporate data
+    process_corporate_data()
     
-    # Process procurement data (limited to 1000 docs for testing)
-    process_procurement_data(max_documents=1000)
+    # Process procurement data
+    process_procurement_data()
 
 
 if __name__ == "__main__":
