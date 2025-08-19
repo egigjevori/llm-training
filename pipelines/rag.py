@@ -43,14 +43,19 @@ def initialize_qdrant() -> bool:
         
         for collection_name in collections:
             try:
+                # Delete existing collection if it exists
                 client.get_collection(collection_name)
-                logger.info(f"Collection {collection_name} already exists")
+                client.delete_collection(collection_name)
+                logger.info(f"Deleted existing collection: {collection_name}")
             except:
-                client.create_collection(
-                    collection_name=collection_name,
-                    vectors_config=VectorParams(size=384, distance=Distance.COSINE)
-                )
-                logger.info(f"Created collection: {collection_name}")
+                logger.info(f"Collection {collection_name} does not exist")
+            
+            # Create new collection
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+            )
+            logger.info(f"Created collection: {collection_name}")
         
         return True
     except Exception as e:
