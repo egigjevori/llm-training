@@ -33,11 +33,8 @@ def get_total_pages() -> int:
     """Get the total number of pages to scrape from the search results."""
     response = requests.get(f"{SEARCH_URL}?page=1", headers=HEADERS, timeout=30)
     response.raise_for_status()
-
     soup = BeautifulSoup(response.content, 'html.parser')
-
     pagination = soup.find('ul', class_='pagination')
-
     last_link = pagination.find('a', string='Last')
     href = last_link.get('href', '')
     page_match = re.search(r'page=(\d+)', href)
@@ -358,34 +355,18 @@ def process_company_link(company_summary: Dict) -> Dict:
 
 @step(enable_cache=False)
 def store_company_in_mongodb(company_detail: Dict) -> bool:
-    """
-    Store company details in MongoDB using NIPT as the unique identifier.
-    
-    Args:
-        company_detail: Dictionary containing company information
-        
-    Returns:
-        bool: True if stored successfully, False otherwise
-    """
+    """Store company details in MongoDB using NIPT as the unique identifier."""
     try:
-        # Get MongoDB connection
         client = get_mongodb_connection()
         db = get_database(client, "opencorporates_albania")
         collection = db["companies"]
-        
-        # Use NIPT as the unique identifier
         nipt = company_detail.get('nipt', 'Unknown')
         
         if nipt == 'Unknown' or not nipt:
             logger.warning(f"Company with NIPT {nipt} has no valid NIPT, skipping MongoDB storage")
             return False
         
-        # Use upsert to update existing records or insert new ones
-        result = collection.update_one(
-            {"nipt": nipt},  # Filter by NIPT
-            {"$set": company_detail},  # Update with new data
-            upsert=True  # Insert if not exists
-        )
+        result = collection.update_one({"nipt": nipt}, {"$set": company_detail}, upsert=True)
         
         if result.upserted_id:
             logger.info(f"Inserted new company with NIPT: {nipt}")
@@ -394,10 +375,8 @@ def store_company_in_mongodb(company_detail: Dict) -> bool:
         else:
             logger.info(f"No changes needed for company with NIPT: {nipt}")
         
-        # Close connection
         client.close()
         return True
-        
     except Exception as e:
         logger.error(f"Error storing company with NIPT {company_detail.get('nipt', 'Unknown')} in MongoDB: {e}")
         return False
