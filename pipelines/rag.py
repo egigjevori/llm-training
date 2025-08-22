@@ -36,10 +36,10 @@ def get_embedding_model() -> SentenceTransformer:
 
 @step
 def initialize_qdrant() -> bool:
-    """Initialize Qdrant collections for corporate and procurement data."""
+    """Initialize Qdrant collections for corporate data."""
     try:
         client = get_qdrant_client()
-        collections = ["corporate_data", "procurement_data"]
+        collections = ["corporate_data"]
         
         for collection_name in collections:
             try:
@@ -93,22 +93,8 @@ def create_corporate_chunk(doc: Dict) -> Dict:
         'text': json.dumps(doc, ensure_ascii=False, separators=(',', ':')),
         'metadata': {
             'source': 'corporate',
-            'nipt': doc.get('nipt', 'unknown'),
-            'company_name': doc.get('emri', 'unknown'),
-            'original_doc': doc
-        }
-    }
-
-
-def create_procurement_chunk(doc: Dict) -> Dict:
-    """Create a text chunk from procurement document using JSON directly."""
-    return {
-        'id': str(uuid4()),
-        'text': json.dumps(doc, ensure_ascii=False, separators=(',', ':')),
-        'metadata': {
-            'source': 'procurement',
-            'tender_id': doc.get('tender_id', 'unknown'),
-            'tender_url': doc.get('tender_url', ''),
+            'company_id': doc.get('company_id', 'unknown'),
+            'company_name': doc.get('name', 'unknown'),
             'original_doc': doc
         }
     }
@@ -191,32 +177,7 @@ def process_corporate_data(batch_size: int = 100) -> bool:
     return True
 
 
-@step
-def process_procurement_data(batch_size: int = 100) -> bool:
-    """Process procurement data in batches."""
-    skip = 0
-    total_processed = 0
-    
-    while True:
-        # Fetch batch
-        documents = fetch_batch_from_mongo("openprocurement_albania", "tenders", batch_size, skip)
-        
-        if not documents:
-            break
-        
-        # Process batch: chunk -> embed -> store
-        chunks = [create_procurement_chunk(doc) for doc in documents]
-        embedded_chunks = generate_embeddings(chunks)
-        success = store_in_qdrant(embedded_chunks, "procurement_data")
-        
-        if success:
-            total_processed += len(documents)
-            logger.info(f"Processed procurement_data batch. Total so far: {total_processed}")
-            
-        skip += batch_size
-    
-    logger.info(f"Completed processing {total_processed} procurement documents")
-    return True
+
 
 
 @pipeline
@@ -227,9 +188,6 @@ def rag_pipeline():
     
     # Process corporate data
     process_corporate_data()
-    
-    # Process procurement data
-    process_procurement_data()
 
 
 if __name__ == "__main__":

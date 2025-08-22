@@ -49,15 +49,15 @@ def process_company_card(card) -> Dict:
         name_elem = card.find('h4', class_='mb-0')
         name = name_elem.get_text(strip=True) if name_elem else "Unknown"
         
-        nipt_elem = card.find('a', class_='font-weight-bold text-muted')
-        nipt = nipt_elem.get_text(strip=True) if nipt_elem else "Unknown"
+        company_id_elem = card.find('a', class_='font-weight-bold text-muted')
+        company_id = company_id_elem.get_text(strip=True) if company_id_elem else "Unknown"
         
         desc_elem = card.find('p', class_='text-muted mb-2 text-sm')
         description = ""
         if desc_elem:
-            nipt_link = desc_elem.find('a')
-            if nipt_link:
-                nipt_link.extract()
+            company_id_link = desc_elem.find('a')
+            if company_id_link:
+                company_id_link.extract()
             description = desc_elem.get_text(strip=True)
         
         location = "Unknown"
@@ -78,16 +78,16 @@ def process_company_card(card) -> Dict:
             detail_url = urljoin(BASE_URL, detail_link.get('href', ''))
         
         company = {
-            "emri": name,
-            "nipt": nipt,
-            "përshkrimi": description,
-            "vendndodhja": location,
-            "monedha": currency,
-            "url_detaje": detail_url,
-            "data_mbledhjes": time.strftime("%Y-%m-%d %H:%M:%S")
+            "name": name,
+            "company_id": company_id,
+            "description": description,
+            "location": location,
+            "currency": currency,
+            "detail_url": detail_url,
+            "collection_date": time.strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        logger.debug(f"Extracted company: {name} ({nipt})")
+        logger.debug(f"Extracted company: {name} ({company_id})")
         return company
         
     except Exception as e:
@@ -144,17 +144,17 @@ def process_table_data(table) -> Dict:
             value = td.get_text(strip=True)
             
             if 'Viti i Themelimit' in header or 'Data e regjistrimit' in header:
-                table_data["data_regjistrimit"] = value
+                table_data["registration_date"] = value
             elif 'Statusi' in header or 'Status' in header:
-                table_data["statusi"] = value
+                table_data["status"] = value
             elif 'Forma ligjore' in header or 'Legal form' in header:
-                table_data["forma_ligjore"] = value
+                table_data["legal_form"] = value
             elif 'Kapitali Themeltar' in header or 'Capital' in header:
-                table_data["kapitali"] = value
+                table_data["capital"] = value
             elif 'Adresa' in header or 'Address' in header:
-                table_data["adresa"] = value
+                table_data["address"] = value
             elif 'Telefoni' in header or 'Phone' in header:
-                table_data["telefoni"] = value
+                table_data["phone"] = value
             elif 'Email' in header or 'E-mail' in header:
                 table_data["email"] = value
             elif 'Website' in header or 'Web' in header:
@@ -162,24 +162,24 @@ def process_table_data(table) -> Dict:
             elif 'Administrator' in header or 'Drejtuesit' in header:
                 admin_links = td.find_all('a')
                 if admin_links:
-                    table_data["administratorët"] = [link.get_text(strip=True) for link in admin_links]
+                    table_data["administrators"] = [link.get_text(strip=True) for link in admin_links]
                 else:
-                    table_data["administratorët"] = [value] if value and value != '-' else []
+                    table_data["administrators"] = [value] if value and value != '-' else []
             elif 'Objekti i Veprimtarisë' in header:
-                table_data["objekti_veprimtarisë"] = value
-                table_data["përshkrimi"] = value
+                table_data["business_object"] = value
+                table_data["description"] = value
             elif 'Emërtime të tjera Tregtare' in header:
-                table_data["emërtime_tjera_tregtare"] = value
+                table_data["other_trading_names"] = value
             elif 'Rrethi' in header:
-                table_data["rrethi"] = value
+                table_data["region"] = value
             elif 'Leje/Licensa' in header:
-                table_data["leje_licensa"] = value
+                table_data["license"] = value
             elif 'Ndryshime' in header:
                 # Add appropriate spaces in ndryshime text
                 cleaned_value = re.sub(r'([a-z])([A-Z])', r'\1 \2', value)
                 cleaned_value = re.sub(r'([a-z])(\d)', r'\1 \2', cleaned_value)
                 cleaned_value = re.sub(r'(\d)([A-Z])', r'\1 \2', cleaned_value)
-                table_data["ndryshime"] = cleaned_value
+                table_data["changes"] = cleaned_value
             elif 'Akte. Tjetërsim Kapitali' in header:
                 # Extract document links
                 links = td.find_all('a')
@@ -194,9 +194,9 @@ def process_table_data(table) -> Dict:
                                 'text': text,
                                 'url': full_url
                             })
-                    table_data["akte_tjetërsim_kapitali"] = document_links
+                    table_data["capital_amendment_documents"] = document_links
                 else:
-                    table_data["akte_tjetërsim_kapitali"] = value
+                    table_data["capital_amendment_documents"] = value
             elif 'Dokumenta Financiare' in header:
                 # Extract document links
                 links = td.find_all('a')
@@ -211,9 +211,9 @@ def process_table_data(table) -> Dict:
                                 'text': text,
                                 'url': full_url
                             })
-                    table_data["dokumenta_financiare"] = document_links
+                    table_data["financial_documents"] = document_links
                 else:
-                    table_data["dokumenta_financiare"] = value
+                    table_data["financial_documents"] = value
     
     return table_data
 
@@ -245,12 +245,12 @@ def process_financial_section(soup) -> Dict:
     if financial_section:
         financial_text = financial_section.get_text(strip=True)
         if financial_text:
-            financial_data["informacione_financiare_text"] = financial_text
+            financial_data["financial_information_text"] = financial_text
         
         profit_info = financial_section.find_next('table')
         if profit_info:
             profit_rows = profit_info.find_all('tr')
-            financial_data["informacione_financiare"] = {}
+            financial_data["financial_information"] = {}
             for row in profit_rows:
                 cells = row.find_all('td')
                 if len(cells) >= 2:
@@ -260,7 +260,7 @@ def process_financial_section(soup) -> Dict:
                         # Add appropriate spaces in financial data
                         cleaned_year = re.sub(r'([a-z])([A-Z])', r'\1 \2', year)
                         cleaned_value = re.sub(r'([a-z])([A-Z])', r'\1 \2', value)
-                        financial_data["informacione_financiare"][cleaned_year] = cleaned_value
+                        financial_data["financial_information"][cleaned_year] = cleaned_value
         
         next_element = financial_section.find_next_sibling()
         if next_element:
@@ -270,7 +270,7 @@ def process_financial_section(soup) -> Dict:
                 cleaned_financial_data = re.sub(r'([a-z])([A-Z])', r'\1 \2', financial_detail_text)
                 cleaned_financial_data = re.sub(r'([a-z])(\d)', r'\1 \2', cleaned_financial_data)
                 cleaned_financial_data = re.sub(r'(\d)([A-Z])', r'\1 \2', cleaned_financial_data)
-                financial_data["informacione_financiare_detaje"] = cleaned_financial_data[:1000]
+                financial_data["financial_information_details"] = cleaned_financial_data[:1000]
     
     return financial_data
 
@@ -300,21 +300,21 @@ def process_additional_sections(soup) -> Dict:
 def process_company_link(company_summary: Dict) -> Dict:
     """Process a single company link and extract detailed information."""
     try:
-        logger.info(f"Scraping details for: {company_summary['emri']} ({company_summary['nipt']})")
+        logger.info(f"Scraping details for: {company_summary['name']} ({company_summary['company_id']})")
         
-        response = requests.get(company_summary['url_detaje'], headers=HEADERS, timeout=30)
+        response = requests.get(company_summary['detail_url'], headers=HEADERS, timeout=30)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
         detail = {
-            "emri": company_summary['emri'],
-            "nipt": company_summary['nipt'],
-            "përshkrimi": company_summary['përshkrimi'],
-            "vendndodhja": company_summary['vendndodhja'],
-            "monedha": company_summary['monedha'],
-            "url_detaje": company_summary['url_detaje'],
-            "data_mbledhjes": time.strftime("%Y-%m-%d %H:%M:%S")
+            "name": company_summary['name'],
+            "company_id": company_summary['company_id'],
+            "description": company_summary['description'],
+            "location": company_summary['location'],
+            "currency": company_summary['currency'],
+            "detail_url": company_summary['detail_url'],
+            "collection_date": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
         # Process table data
@@ -324,10 +324,10 @@ def process_company_link(company_summary: Dict) -> Dict:
             detail.update(table_data)
         
         # Process shareholders
-        if "zotëruesit" not in detail:
+        if "shareholders" not in detail:
             shareholders = process_shareholders(soup)
             if shareholders:
-                detail["zotëruesit"] = shareholders
+                detail["shareholders"] = shareholders
         
         # Process financial section
         financial_data = process_financial_section(soup)
@@ -335,50 +335,50 @@ def process_company_link(company_summary: Dict) -> Dict:
         
         # Process additional sections
         additional_sections_data = process_additional_sections(soup)
-        detail["seksione_shtesë"] = additional_sections_data
+        detail["additional_sections"] = additional_sections_data
         
-        logger.info(f"Successfully scraped details for {detail['emri']}")
+        logger.info(f"Successfully scraped details for {detail['name']}")
         return detail
         
     except Exception as e:
-        logger.error(f"Error scraping details for {company_summary['emri']}: {e}")
+        logger.error(f"Error scraping details for {company_summary['name']}: {e}")
         return {
-            "emri": company_summary['emri'],
-            "nipt": company_summary['nipt'],
-            "përshkrimi": company_summary['përshkrimi'],
-            "vendndodhja": company_summary['vendndodhja'],
-            "monedha": company_summary['monedha'],
-            "url_detaje": company_summary['url_detaje'],
-            "data_mbledhjes": time.strftime("%Y-%m-%d %H:%M:%S")
+            "name": company_summary['name'],
+            "company_id": company_summary['company_id'],
+            "description": company_summary['description'],
+            "location": company_summary['location'],
+            "currency": company_summary['currency'],
+            "detail_url": company_summary['detail_url'],
+            "collection_date": time.strftime("%Y-%m-%d %H:%M:%S")
         }
 
 
 @step(enable_cache=False)
 def store_company_in_mongodb(company_detail: Dict) -> bool:
-    """Store company details in MongoDB using NIPT as the unique identifier."""
+    """Store company details in MongoDB using company_id as the unique identifier."""
     try:
         client = get_mongodb_connection()
         db = get_database(client, "opencorporates_albania")
         collection = db["companies"]
-        nipt = company_detail.get('nipt', 'Unknown')
+        company_id = company_detail.get('company_id', 'Unknown')
         
-        if nipt == 'Unknown' or not nipt:
-            logger.warning(f"Company with NIPT {nipt} has no valid NIPT, skipping MongoDB storage")
+        if company_id == 'Unknown' or not company_id:
+            logger.warning(f"Company with company_id {company_id} has no valid company_id, skipping MongoDB storage")
             return False
         
-        result = collection.update_one({"nipt": nipt}, {"$set": company_detail}, upsert=True)
+        result = collection.update_one({"company_id": company_id}, {"$set": company_detail}, upsert=True)
         
         if result.upserted_id:
-            logger.info(f"Inserted new company with NIPT: {nipt}")
+            logger.info(f"Inserted new company with company_id: {company_id}")
         elif result.modified_count > 0:
-            logger.info(f"Updated existing company with NIPT: {nipt}")
+            logger.info(f"Updated existing company with company_id: {company_id}")
         else:
-            logger.info(f"No changes needed for company with NIPT: {nipt}")
+            logger.info(f"No changes needed for company with company_id: {company_id}")
         
         client.close()
         return True
     except Exception as e:
-        logger.error(f"Error storing company with NIPT {company_detail.get('nipt', 'Unknown')} in MongoDB: {e}")
+        logger.error(f"Error storing company with company_id {company_detail.get('company_id', 'Unknown')} in MongoDB: {e}")
         return False
 
 
@@ -392,7 +392,7 @@ def process_page(page: int) -> List[Dict]:
             detail = process_company_link(company)
             company_details.append(detail)
         except Exception as e:
-            logger.error(f"Error processing company {company.get('emri', 'Unknown')}: {e}")
+            logger.error(f"Error processing company {company.get('name', 'Unknown')}: {e}")
             continue
     
     return company_details
@@ -409,14 +409,14 @@ def process_multiple_pages(total_pages: int) -> None:
             for detail in company_details:
                 stored = store_company_in_mongodb(detail)
                 
-                name = detail.get('emri', 'Unknown')
-                nipt = detail.get('nipt', 'Unknown')
-                location = detail.get('vendndodhja', 'Unknown')
-                status = detail.get('statusi', 'Unknown')
-                registration_date = detail.get('data_regjistrimit', 'Unknown')
+                name = detail.get('name', 'Unknown')
+                company_id = detail.get('company_id', 'Unknown')
+                location = detail.get('location', 'Unknown')
+                status = detail.get('status', 'Unknown')
+                registration_date = detail.get('registration_date', 'Unknown')
                 storage_status = "✅ Stored" if stored else "❌ Failed"
                 
-                logger.info(f"Company: {name} | NIPT: {nipt} | Location: {location} | Status: {status} | Registration: {registration_date} | MongoDB: {storage_status}")
+                logger.info(f"Company: {name} | Company ID: {company_id} | Location: {location} | Status: {status} | Registration: {registration_date} | MongoDB: {storage_status}")
                 
         except Exception as e:
             logger.error(f"Error processing page {page}: {e}")
