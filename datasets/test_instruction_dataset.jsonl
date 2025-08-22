@@ -1,0 +1,5 @@
+{"instruction": "What is the name of the company with NIPT L61305031N?", "response": "The company name is VIOLA DOG & CAT.", "category": "company_info", "source": "corporate"}
+{"instruction": "Tell me about the company VIOLA DOG & CAT.", "response": "VIOLA DOG & CAT is a company registered in Albania with NIPT L61305031N. Import - eksport, shpërndarja dhe tregtimi me shumicë e pakicë i të gjithë artikujve, mallrave dhe lëndëve të para të të gjitha llojeve që nuk ndalohen nga legjisLaçioni shqiptar dhe ai ndërkombëtar.", "category": "company_description", "source": "corporate"}
+{"instruction": "What is the capital of Albania?", "response": "The capital of Albania is Tirana.", "category": "geography", "source": "general"}
+{"instruction": "How many people live in Albania?", "response": "Albania has approximately 2.8 million people.", "category": "demographics", "source": "general"}
+{"instruction": "What is the official language of Albania?", "response": "The official language of Albania is Albanian.", "category": "language", "source": "general"}
