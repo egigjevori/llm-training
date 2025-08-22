@@ -79,7 +79,7 @@ class TrainingConfig:
             self.target_modules = ["c_attn", "c_proj", "c_fc", "c_proj"]
 
 
-@step
+@step(enable_cache=False)
 def load_instruction_dataset(dataset_path: str = "datasets/instruction_dataset.jsonl") -> Dataset:
     """Load and prepare the instruction dataset."""
     try:
@@ -104,7 +104,7 @@ def load_instruction_dataset(dataset_path: str = "datasets/instruction_dataset.j
         raise
 
 
-@step
+@step(enable_cache=False)
 def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[object, object]:
     """Prepare the model and tokenizer for QLoRA fine-tuning."""
     try:
@@ -200,7 +200,7 @@ def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[object, object]
         raise
 
 
-@step
+@step(enable_cache=False)
 def preprocess_dataset(dataset: Dataset, tokenizer: object, config: TrainingConfig) -> Dataset:
     """Preprocess the dataset for training."""
     try:
@@ -243,7 +243,7 @@ def preprocess_dataset(dataset: Dataset, tokenizer: object, config: TrainingConf
         raise
 
 
-@step
+@step(enable_cache=False)
 def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
     """Setup training arguments for the trainer."""
     try:
@@ -284,7 +284,7 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
         raise
 
 
-@step
+@step(enable_cache=False)
 def train_model(
     model: object,
     tokenizer: object,
@@ -350,7 +350,7 @@ def train_model(
         raise
 
 
-@step
+@step(enable_cache=False)
 def evaluate_model(
     model_path: str,
     tokenizer: object,
@@ -465,7 +465,7 @@ def evaluate_model(
         raise
 
 
-@step
+@step(enable_cache=False)
 def create_inference_pipeline(model_path: str, config: TrainingConfig) -> str:
     """Create an inference pipeline for the fine-tuned model."""
     try:

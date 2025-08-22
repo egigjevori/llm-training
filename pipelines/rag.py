@@ -31,10 +31,10 @@ def get_qdrant_client() -> QdrantClient:
 
 def get_embedding_model() -> SentenceTransformer:
     """Get embedding model."""
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    return SentenceTransformer('BAAI/bge-small-en-v1.5')
 
 
-@step
+@step(enable_cache=False)
 def initialize_qdrant() -> bool:
     """Initialize Qdrant collections for corporate data."""
     try:
@@ -149,7 +149,7 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> bool:
         return False
 
 
-@step
+@step(enable_cache=False)
 def process_corporate_data(batch_size: int = 100) -> bool:
     """Process corporate data in batches."""
     skip = 0
