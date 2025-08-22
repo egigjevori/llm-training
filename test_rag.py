@@ -59,20 +59,11 @@ def display_corporate_results(results: List[Dict], query: str):
     for i, result in enumerate(results, 1):
         print(f"\n--- Result {i} (Score: {result['score']:.3f}) ---")
         print(f"Company: {result['metadata'].get('company_name', 'Unknown')}")
-        print(f"NIPT: {result['metadata'].get('nipt', 'Unknown')}")
-        print(f"Text: {result['text'][:200]}...")
+        print(f"Company ID: {result['metadata'].get('company_id', 'Unknown')}")
+        print(f"Text: {result['text']}")
 
 
-def display_procurement_results(results: List[Dict], query: str):
-    """Display procurement search results."""
-    print(f"\n{'='*60}")
-    print(f"SEARCHING PROCUREMENT DATA: {query}")
-    print(f"{'='*60}")
-    
-    for i, result in enumerate(results, 1):
-        print(f"\n--- Result {i} (Score: {result['score']:.3f}) ---")
-        print(f"Tender ID: {result['metadata'].get('tender_id', 'Unknown')}")
-        print(f"Text: {result['text'][:300]}...")
+
 
 
 def search_and_display(query: str, collection_name: str, display_func, top_k: int = 5):
@@ -94,11 +85,7 @@ def test_rag_queries():
         ("consulting services", "corporate_data", display_corporate_results),
         ("restaurant or food business", "corporate_data", display_corporate_results),
         
-        # Procurement queries
-        ("road construction tender", "procurement_data", display_procurement_results),
-        ("medical equipment procurement", "procurement_data", display_procurement_results),
-        ("IT services tender", "procurement_data", display_procurement_results),
-        ("cleaning services contract", "procurement_data", display_procurement_results)
+
     ]
     
     for query, collection, display_func in test_cases:
@@ -109,7 +96,7 @@ def check_collections_status():
     """Check the status of Qdrant collections."""
     try:
         client = get_qdrant_client()
-        collections = ["corporate_data", "procurement_data"]
+        collections = ["corporate_data"]
         
         print("\n📊 Qdrant Collections Status:")
         print("="*40)
@@ -137,4 +124,4 @@ if __name__ == "__main__":
     
     print(f"\n{'='*60}")
     print("✅ RAG Testing Complete!")
-    print("="*60) 
+    print("="*60)
