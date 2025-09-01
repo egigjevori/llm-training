@@ -511,7 +511,7 @@ def generate_dataset_statistics(instructions: List[Dict]) -> Dict:
 
 @pipeline
 def instruction_dataset_pipeline(
-    corporate_limit: int = 1000,
+    corporate_limit: int = 100,
     output_path: str = "datasets/instruction_dataset.jsonl"
 ):
     """Main pipeline for generating custom instruction dataset from corporate data."""

@@ -399,15 +399,26 @@ def process_page(page: int) -> List[Dict]:
 
 
 @step(enable_cache=False)
-def process_multiple_pages(total_pages: int) -> None:
+def process_multiple_pages(total_pages: int, max_companies: int = 100) -> None:
     """Process multiple pages of company listings and their details."""
-    for page in range(1, total_pages):
+    companies_processed = 0
+    
+    for page in range(1, total_pages + 1):
+        if companies_processed >= max_companies:
+            logger.info(f"Reached maximum limit of {max_companies} companies. Stopping scraping.")
+            break
+            
         try:
             company_details = process_page(page)
             
-            # Store all companies from this page
+            # Store companies from this page, respecting the limit
             for detail in company_details:
+                if companies_processed >= max_companies:
+                    logger.info(f"Reached maximum limit of {max_companies} companies during page {page} processing.")
+                    break
+                    
                 stored = store_company_in_mongodb(detail)
+                companies_processed += 1
                 
                 name = detail.get('name', 'Unknown')
                 company_id = detail.get('company_id', 'Unknown')
@@ -416,11 +427,13 @@ def process_multiple_pages(total_pages: int) -> None:
                 registration_date = detail.get('registration_date', 'Unknown')
                 storage_status = "✅ Stored" if stored else "❌ Failed"
                 
-                logger.info(f"Company: {name} | Company ID: {company_id} | Location: {location} | Status: {status} | Registration: {registration_date} | MongoDB: {storage_status}")
+                logger.info(f"[{companies_processed}/{max_companies}] Company: {name} | Company ID: {company_id} | Location: {location} | Status: {status} | Registration: {registration_date} | MongoDB: {storage_status}")
                 
         except Exception as e:
             logger.error(f"Error processing page {page}: {e}")
             continue
+    
+    logger.info(f"Scraping completed. Total companies processed: {companies_processed}")
 
 
 @pipeline
