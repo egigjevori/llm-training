@@ -31,7 +31,7 @@ def get_qdrant_client() -> QdrantClient:
 
 def get_embedding_model() -> SentenceTransformer:
     """Get embedding model."""
-    return SentenceTransformer('BAAI/bge-small-en-v1.5')
+    return SentenceTransformer("BAAI/bge-m3")
 
 
 @step(enable_cache=False)
@@ -53,7 +53,7 @@ def initialize_qdrant() -> bool:
             # Create new collection
             client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+                vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
             )
             logger.info(f"Created collection: {collection_name}")
         
@@ -150,14 +150,18 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> bool:
 
 
 @step(enable_cache=False)
-def process_corporate_data(batch_size: int = 100) -> bool:
-    """Process corporate data in batches."""
+def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> bool:
+    """Process corporate data in batches with document limit."""
     skip = 0
     total_processed = 0
     
-    while True:
+    while total_processed < max_documents:
+        # Calculate remaining documents to process
+        remaining = max_documents - total_processed
+        current_batch_size = min(batch_size, remaining)
+        
         # Fetch batch
-        documents = fetch_batch_from_mongo("opencorporates_albania", "companies", batch_size, skip)
+        documents = fetch_batch_from_mongo("opencorporates_albania", "companies", current_batch_size, skip)
         
         if not documents:
             break
@@ -171,7 +175,11 @@ def process_corporate_data(batch_size: int = 100) -> bool:
             total_processed += len(documents)
             logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
             
-        skip += batch_size
+        skip += len(documents)
+        
+        if total_processed >= max_documents:
+            logger.info(f"Reached maximum limit of {max_documents} documents. Stopping processing.")
+            break
     
     logger.info(f"Completed processing {total_processed} corporate documents")
     return True
