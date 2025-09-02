@@ -8,8 +8,19 @@ import logging
 from typing import List, Dict, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
+from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
+
+_embedding_model = None
+
+
+def get_embedding_model() -> SentenceTransformer:
+    """Get embedding model (singleton)."""
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer("BAAI/bge-m3")
+    return _embedding_model
 
 
 def get_qdrant_client() -> QdrantClient:
