@@ -7,9 +7,10 @@ import logging
 import json
 import os
 import torch
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple, Union
 from dataclasses import dataclass
-from pathlib import Path
+
+from datasets.arrow_dataset import Dataset
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,22 +21,19 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling
+    DataCollatorForLanguageModeling,
+    PreTrainedModel,
+    PreTrainedTokenizerBase
 )
 from peft import (
     LoraConfig,
     get_peft_model,
-    TaskType
+    TaskType,
+    PeftModel
 )
-from datasets import Dataset
-import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-
-
 
 @dataclass
 class TrainingConfig:
@@ -47,24 +45,22 @@ class TrainingConfig:
     truncation: bool = True
     
     # QLoRA configuration
-    lora_r: int = 8  # Reduced from 16 to save memory
-    lora_alpha: int = 16  # Reduced from 32 to save memory
-    lora_dropout: float = 0.1
+    lora_r: int = 16  # Increased for more adaptation capacity
+    lora_alpha: int = 32  # Increased for stronger adaptation
+    lora_dropout: float = 0.05  # Reduced for less regularization
     target_modules: List[str] = None  # Will auto-detect if None
     
     # Training configuration
     num_epochs: int = 3
-    batch_size: int = 1  # Reduced from 4 to save memory
-    gradient_accumulation_steps: int = 8  # Increased from 4 to maintain effective batch size
-    learning_rate: float = 2e-4
-    warmup_steps: int = 100
-    weight_decay: float = 0.01
+    batch_size: int = 2  # Increased if memory allows
+    gradient_accumulation_steps: int = 4  # Reduced (effective batch = 8)
+    learning_rate: float = 1e-5  # Increased for better learning
+    warmup_steps: int = 50  # Gentle warmup
+    weight_decay: float = 0.001  # Reduced regularization
     logging_steps: int = 10
-    save_steps: int = 500
-    eval_steps: int = 500
-    
+    save_steps: int = 100  # More frequent saves
+    eval_steps: int = 100  # More frequent evaluation
 
-    
     # Memory optimization configuration
     gradient_checkpointing: bool = True  # Enable gradient checkpointing
     use_flash_attention: bool = True  # Use flash attention if available
@@ -131,7 +127,7 @@ def load_instruction_dataset(dataset_path: str = "datasets/instruction_dataset.j
 
 
 @step(enable_cache=False)
-def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[object, object]:
+def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[PreTrainedTokenizerBase, Union[PreTrainedModel, PeftModel]]:
     """Prepare the model and tokenizer for QLoRA fine-tuning."""
     try:
         logger.info(f"Loading base model: {config.base_model}")
@@ -163,54 +159,12 @@ def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[object, object]
         if config.gradient_checkpointing:
             model.gradient_checkpointing_enable()
             logger.info("Gradient checkpointing enabled")
-        
-        # Enable flash attention if available and requested
-        if config.use_flash_attention:
-            try:
-                # Check if flash attention is available
-                import flash_attn
-                logger.info("Flash attention available, enabling...")
-                
-                # Enable flash attention for the model
-                for module in model.modules():
-                    if hasattr(module, 'config') and hasattr(module.config, 'use_flash_attention_2'):
-                        module.config.use_flash_attention_2 = True
-                        logger.info("Flash attention 2 enabled for attention modules")
-                        break
-            except ImportError:
-                logger.warning("Flash attention not available, using standard attention")
-        
-        # Auto-detect target modules if not specified
-        if config.target_modules is None:
-            # Get all module names
-            module_names = set()
-            for name, _ in model.named_modules():
-                module_names.add(name.split('.')[-1])
-            
-            # Common target modules for different model architectures
-            common_targets = {
-                "c_attn", "c_proj", "c_fc",  # GPT-2/DialoGPT style
-                "q_proj", "v_proj", "k_proj", "o_proj",  # LLaMA style
-                "gate_proj", "up_proj", "down_proj",  # LLaMA MLP
-                "query", "key", "value", "dense",  # BERT style
-                "fc1", "fc2", "proj"  # Generic
-            }
-            
-            # Find matching modules
-            target_modules = list(common_targets.intersection(module_names))
-            if not target_modules:
-                # Fallback to common attention modules
-                target_modules = ["c_attn", "c_proj"]
-            
-            logger.info(f"Auto-detected target modules: {target_modules}")
-        else:
-            target_modules = config.target_modules
-        
+
         # Configure LoRA with memory-optimized settings
         lora_config = LoraConfig(
             r=config.lora_r,
             lora_alpha=config.lora_alpha,
-            target_modules=target_modules,
+            target_modules=config.target_modules,
             lora_dropout=config.lora_dropout,
             bias="none",
             task_type=TaskType.CAUSAL_LM,
@@ -236,7 +190,7 @@ def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[object, object]
 
 
 @step(enable_cache=False)
-def preprocess_dataset(dataset: Dataset, tokenizer: object, config: TrainingConfig) -> Dataset:
+def preprocess_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase, config: TrainingConfig) -> Dataset:
     """Preprocess the dataset for training."""
     try:
         logger.info("Preprocessing dataset for training")
@@ -247,7 +201,7 @@ def preprocess_dataset(dataset: Dataset, tokenizer: object, config: TrainingConf
             response = example.get('response', '')
             
             # Format as instruction-following prompt
-            formatted_text = f"### Instruction:\n{instruction}\n\n### Response:\n{response}\n\n### End\n"
+            formatted_text = f"### Instruction:\n{instruction}\n\n### Response:\n{response}"
             return {"text": formatted_text}
         
         def tokenize_function(examples):
@@ -304,14 +258,7 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
         
         # Create output directory
         os.makedirs(config.output_dir, exist_ok=True)
-        
-        # Check if we're on MPS (Apple Silicon) and disable fp16
-        import torch
-        use_fp16 = True
-        if torch.backends.mps.is_available():
-            use_fp16 = False
-            logger.info("MPS detected, disabling fp16 mixed precision")
-        
+
         training_args = TrainingArguments(
             output_dir=config.output_dir,
             num_train_epochs=config.num_epochs,
@@ -323,7 +270,14 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
             logging_steps=config.logging_steps,
             save_steps=config.save_steps,
             save_total_limit=config.save_total_limit,
-            fp16=use_fp16,
+            fp16=False,
+            # Learning rate schedule
+            lr_scheduler_type="cosine",
+            warmup_ratio=0.05,  # 5% of total steps
+            # Optimizer settings
+            optim="adamw_torch",
+            adam_beta1=0.9,
+            adam_beta2=0.95,
             # Memory optimization settings
             dataloader_pin_memory=False,  # Disable pin memory to save RAM
             remove_unused_columns=False,
@@ -334,7 +288,7 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
             # Gradient checkpointing (already enabled in model, but ensure it's set here too)
             gradient_checkpointing=config.gradient_checkpointing,
             # Memory-efficient optimizations
-            max_grad_norm=1.0,  # Gradient clipping to prevent memory spikes
+            max_grad_norm=1.0,  # Relaxed gradient clipping for better learning
             # Save memory during evaluation
             eval_strategy="steps" if config.eval_steps > 0 else "no",
             eval_steps=config.eval_steps,
@@ -356,8 +310,8 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
 
 @step(enable_cache=False)
 def train_model(
-    model: object,
-    tokenizer: object,
+    model: Union[PreTrainedModel, PeftModel],
+    tokenizer: PreTrainedTokenizerBase,
     dataset: Dataset,
     training_args: TrainingArguments,
     config: TrainingConfig
@@ -373,11 +327,7 @@ def train_model(
         
         logger.info(f"Training samples: {len(train_dataset)}")
         logger.info(f"Validation samples: {len(eval_dataset)}")
-        
-        # Clear memory after dataset split
-        import gc
-        gc.collect()
-        
+
         # Setup data collator
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=tokenizer,
@@ -391,21 +341,12 @@ def train_model(
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             data_collator=data_collator,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
         )
-        
 
-        
         # Train the model
         logger.info("Starting training...")
         trainer.train()
-        
-
-        
-        # Clear GPU cache if available
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            logger.info("GPU cache cleared")
         
         # Save the model
         logger.info("Saving fine-tuned model...")
@@ -431,29 +372,19 @@ def train_model(
         
         with open(os.path.join(config.output_dir, "training_config.json"), "w") as f:
             json.dump(config_dict, f, indent=2)
-        
-        # Final memory cleanup
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        
+
         logger.info(f"Model saved to {config.output_dir}")
         return config.output_dir
         
     except Exception as e:
         logger.error(f"Error during training: {e}")
-        # Cleanup on error
-        import gc
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
         raise
 
 
 @step(enable_cache=False)
 def evaluate_model(
     model_path: str,
-    tokenizer: object,
+    tokenizer: PreTrainedTokenizerBase,
     test_dataset: Dataset,
     config: TrainingConfig
 ) -> Dict:
@@ -492,8 +423,9 @@ def evaluate_model(
         test_results = []
         test_samples = test_dataset.select(range(min(5, len(test_dataset))))
         
-        for i, sample in enumerate(test_samples):
+        for i in range(len(test_samples)):
             try:
+                sample = test_samples[i]
                 instruction = sample.get('instruction', '')
                 expected_response = sample.get('response', '')
                 
