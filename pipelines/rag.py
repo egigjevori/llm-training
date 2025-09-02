@@ -6,6 +6,7 @@ Refactored version with minimal duplication
 import logging
 import json
 import os
+import time
 from typing import List, Dict
 from uuid import uuid4
 
@@ -35,7 +36,7 @@ def get_embedding_model() -> SentenceTransformer:
 
 
 @step(enable_cache=False)
-def initialize_qdrant() -> bool:
+def initialize_qdrant() -> None:
     """Initialize Qdrant collections for corporate data."""
     try:
         client = get_qdrant_client()
@@ -56,11 +57,10 @@ def initialize_qdrant() -> bool:
                 vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
             )
             logger.info(f"Created collection: {collection_name}")
-        
-        return True
+
     except Exception as e:
         logger.error(f"Error initializing Qdrant: {e}")
-        return False
+        raise
 
 
 def fetch_batch_from_mongo(db_name: str, collection_name: str, batch_size: int = 100, skip: int = 0) -> List[Dict]:
@@ -83,7 +83,7 @@ def fetch_batch_from_mongo(db_name: str, collection_name: str, batch_size: int =
         
     except Exception as e:
         logger.error(f"Error fetching batch from {db_name}.{collection_name}: {e}")
-        return []
+        raise
 
 
 def create_corporate_chunk(doc: Dict) -> Dict:
@@ -118,14 +118,11 @@ def generate_embeddings(chunks: List[Dict]) -> List[Dict]:
         
     except Exception as e:
         logger.error(f"Error generating embeddings: {e}")
-        return []
+        raise
 
 
-def store_in_qdrant(chunks: List[Dict], collection_name: str) -> bool:
+def store_in_qdrant(chunks: List[Dict], collection_name: str) -> None:
     """Store embedded chunks in Qdrant."""
-    if not chunks:
-        return True
-        
     try:
         client = get_qdrant_client()
         
@@ -142,15 +139,14 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> bool:
         
         client.upsert(collection_name=collection_name, points=points)
         logger.info(f"Stored {len(points)} points in Qdrant collection: {collection_name}")
-        return True
-        
+
     except Exception as e:
         logger.error(f"Error storing in Qdrant: {e}")
-        return False
+        raise
 
 
 @step(enable_cache=False)
-def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> bool:
+def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> None:
     """Process corporate data in batches with document limit."""
     skip = 0
     total_processed = 0
@@ -169,12 +165,11 @@ def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> boo
         # Process batch: chunk -> embed -> store
         chunks = [create_corporate_chunk(doc) for doc in documents]
         embedded_chunks = generate_embeddings(chunks)
-        success = store_in_qdrant(embedded_chunks, "corporate_data")
+        store_in_qdrant(embedded_chunks, "corporate_data")
         
-        if success:
-            total_processed += len(documents)
-            logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
-            
+        total_processed += len(documents)
+        logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
+
         skip += len(documents)
         
         if total_processed >= max_documents:
@@ -182,7 +177,6 @@ def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> boo
             break
     
     logger.info(f"Completed processing {total_processed} corporate documents")
-    return True
 
 
 
