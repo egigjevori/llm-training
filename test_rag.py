@@ -7,19 +7,15 @@ import os
 import logging
 from typing import List, Dict
 
-from sentence_transformers import SentenceTransformer
-from utils.qdrant import get_collection_info, search_similar
+from utils.qdrant import get_collection_info, search_similar, get_embedding_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-
-
 def search_qdrant(query: str, collection_name: str, top_k: int = 5) -> List[Dict]:
     """Search for similar documents in Qdrant."""
     try:
-        model = SentenceTransformer('BAAI/bge-m3')
+        model = get_embedding_model()
         
         # Generate query embedding
         query_embedding = model.encode([query])[0].tolist()
