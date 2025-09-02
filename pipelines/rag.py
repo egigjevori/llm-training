@@ -13,21 +13,14 @@ from uuid import uuid4
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import torch
 from zenml import pipeline, step
-from sentence_transformers import SentenceTransformer
 from qdrant_client.models import PointStruct
 from utils.mongo import get_mongodb_connection, get_database
-from utils.qdrant import create_collection, upsert_points
+from utils.qdrant import create_collection, upsert_points, get_embedding_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-
-
-def get_embedding_model() -> SentenceTransformer:
-    """Get embedding model."""
-    return SentenceTransformer("BAAI/bge-m3")
 
 
 @step(enable_cache=False)
@@ -58,7 +51,6 @@ def fetch_batch_from_mongo(db_name: str, collection_name: str, batch_size: int =
             if '_id' in doc:
                 doc['_id'] = str(doc['_id'])
         
-        client.close()
         logger.info(f"Fetched {len(documents)} documents from {db_name}.{collection_name} (skip: {skip})")
         return documents
         
@@ -83,9 +75,6 @@ def create_corporate_chunk(doc: Dict) -> Dict:
 
 def generate_embeddings(chunks: List[Dict]) -> List[Dict]:
     """Generate embeddings for text chunks."""
-    if not chunks:
-        return []
-        
     try:
         model = get_embedding_model()
         texts = [chunk['text'] for chunk in chunks]
@@ -124,7 +113,7 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> None:
 
 
 @step(enable_cache=False)
-def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> None:
+def process_corporate_data(batch_size: int = 2, max_documents: int = 100) -> None:
     """Process corporate data in batches with document limit."""
     skip = 0
     total_processed = 0
@@ -144,6 +133,10 @@ def process_corporate_data(batch_size: int = 5, max_documents: int = 100) -> Non
         chunks = [create_corporate_chunk(doc) for doc in documents]
         embedded_chunks = generate_embeddings(chunks)
         store_in_qdrant(embedded_chunks, "corporate_data")
+        
+        # Clear GPU cache to free memory
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
         
         total_processed += len(documents)
         logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
