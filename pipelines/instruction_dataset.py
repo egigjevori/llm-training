@@ -360,69 +360,6 @@ def generate_comparison_instructions(corporate_data: List[Dict]) -> List[Dict]:
     return instructions
 
 
-def generate_analytical_instructions(corporate_data: List[Dict]) -> List[Dict]:
-    """Generate analytical instruction-response pairs."""
-    instructions = []
-    
-    # Company statistics
-    total_companies = len(corporate_data)
-    active_companies = len([c for c in corporate_data if c.get('status', '').lower() in ['aktiv', 'active']])
-    
-    instructions.append({
-        "instruction": "How many companies are registered in the database?",
-        "response": f"There are {total_companies} companies registered in the database.",
-        "category": "analytics",
-        "source": "corporate"
-    })
-    
-    if active_companies > 0:
-        instructions.append({
-            "instruction": "How many companies are currently active?",
-            "response": f"There are {active_companies} active companies out of {total_companies} total companies.",
-            "category": "analytics",
-            "source": "corporate"
-        })
-        
-        # Market share analysis
-        instructions.append({
-            "instruction": "Calculate the market share of active companies.",
-            "response": f"To calculate market share, you would analyze the proportion of active companies ({active_companies}) relative to total companies ({total_companies}), and further break this down by industry sectors and geographic regions.",
-            "category": "market_analysis",
-            "source": "corporate"
-        })
-    
-
-    
-    # Advanced analytics
-    if corporate_data:
-        # Industry distribution analysis
-        business_activities = [c.get('business_object', 'Unknown') for c in corporate_data if c.get('business_object', 'Unknown') != "Unknown"]
-        if business_activities:
-            instructions.append({
-                "instruction": "Analyze the distribution of business activities across companies.",
-                "response": f"To analyze business activity distribution, you would categorize companies by their business activities, identify the most common sectors, and examine geographic and temporal patterns in business formation.",
-                "category": "industry_analysis",
-                "source": "corporate"
-            })
-        
-        # Capital analysis
-        companies_with_capital = [c for c in corporate_data if c.get('capital') and c.get('capital') != "Unknown"]
-        if companies_with_capital:
-            instructions.append({
-                "instruction": "Analyze the capital distribution across companies.",
-                "response": f"To analyze capital distribution, you would examine the range, median, and distribution of company capital, identify capital-intensive sectors, and analyze the relationship between capital and business activity.",
-                "category": "capital_analysis",
-                "source": "corporate"
-            })
-    
-
-    
-    return instructions
-
-
-
-
-
 @step(enable_cache=False)
 def generate_instruction_dataset(corporate_data: List[Dict]) -> List[Dict]:
     """Generate comprehensive instruction dataset from corporate data."""
@@ -436,11 +373,6 @@ def generate_instruction_dataset(corporate_data: List[Dict]) -> List[Dict]:
     logger.info("Generating comparison instructions...")
     comparison_instructions = generate_comparison_instructions(corporate_data)
     all_instructions.extend(comparison_instructions)
-    
-    logger.info("Generating analytical instructions...")
-    analytical_instructions = generate_analytical_instructions(corporate_data)
-    all_instructions.extend(analytical_instructions)
-    
 
     
     # Add metadata to each instruction
