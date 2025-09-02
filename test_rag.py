@@ -8,42 +8,24 @@ import logging
 from typing import List, Dict
 
 from sentence_transformers import SentenceTransformer
-from qdrant_client import QdrantClient
+from utils.qdrant import get_collection_info, search_similar
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_qdrant_client() -> QdrantClient:
-    """Get Qdrant client with environment configuration."""
-    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
-    return QdrantClient(host=qdrant_host, port=qdrant_port)
 
 
 def search_qdrant(query: str, collection_name: str, top_k: int = 5) -> List[Dict]:
     """Search for similar documents in Qdrant."""
     try:
-        client = get_qdrant_client()
-        model = SentenceTransformer('all-MiniLM-L6-v2')
+        model = SentenceTransformer('BAAI/bge-m3')
         
         # Generate query embedding
         query_embedding = model.encode([query])[0].tolist()
         
-        # Search in Qdrant
-        search_results = client.search(
-            collection_name=collection_name,
-            query_vector=query_embedding,
-            limit=top_k,
-            with_payload=True
-        )
-        
-        # Format results
-        return [{
-            'score': result.score,
-            'text': result.payload['text'],
-            'metadata': result.payload['metadata']
-        } for result in search_results]
+        # Use the utility function for searching
+        return search_similar(collection_name, query_embedding, top_k)
         
     except Exception as e:
         logger.error(f"Error searching Qdrant: {e}")
@@ -95,19 +77,17 @@ def test_rag_queries():
 def check_collections_status():
     """Check the status of Qdrant collections."""
     try:
-        client = get_qdrant_client()
         collections = ["corporate_data"]
         
         print("\n📊 Qdrant Collections Status:")
         print("="*40)
         
         for collection_name in collections:
-            try:
-                client.get_collection(collection_name)
-                count = client.count(collection_name)
-                print(f"{collection_name}: {count.count} documents")
-            except Exception as e:
-                print(f"{collection_name}: Not found or error - {e}")
+            info = get_collection_info(collection_name)
+            if info:
+                print(f"{collection_name}: {info['count']} documents")
+            else:
+                print(f"{collection_name}: Not found or error")
                 
     except Exception as e:
         print(f"Error checking collections: {e}")

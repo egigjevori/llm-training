@@ -56,7 +56,7 @@ def get_collection_info(collection_name: str) -> Optional[Dict]:
         }
     except Exception as e:
         logger.warning(f"Collection {collection_name} not found or error: {e}")
-        return None
+        raise
 
 
 def search_similar(collection_name: str, query_vector: List[float], top_k: int = 5) -> List[Dict]:
@@ -64,12 +64,12 @@ def search_similar(collection_name: str, query_vector: List[float], top_k: int =
     try:
         client = get_qdrant_client()
         
-        search_results = client.search(
+        search_results = client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             with_payload=True
-        )
+        ).points
         
         return [{
             'score': result.score,
@@ -79,7 +79,7 @@ def search_similar(collection_name: str, query_vector: List[float], top_k: int =
         
     except Exception as e:
         logger.error(f"Error searching collection {collection_name}: {e}")
-        return []
+        raise
 
 
 def upsert_points(collection_name: str, points: List[PointStruct]) -> None:
