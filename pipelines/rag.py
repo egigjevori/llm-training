@@ -6,7 +6,6 @@ Refactored version with minimal duplication
 import logging
 import json
 import os
-import time
 from typing import List, Dict
 from uuid import uuid4
 
