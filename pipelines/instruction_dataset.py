@@ -43,7 +43,7 @@ def fetch_corporate_data(limit: int = 1000) -> List[Dict]:
         
     except Exception as e:
         logger.error(f"Error fetching corporate data: {e}")
-        return []
+        raise
 
 
 def clean_text(text: str) -> str:
@@ -400,7 +400,7 @@ def save_instruction_dataset(instructions: List[Dict], output_path: str = "instr
         
     except Exception as e:
         logger.error(f"Error saving instruction dataset: {e}")
-        return ""
+        raise
 
 
 @step(enable_cache=False)
