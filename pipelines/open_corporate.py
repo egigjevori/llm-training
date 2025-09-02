@@ -16,7 +16,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from zenml import pipeline, step
-from mongo import get_mongodb_connection, get_database
+from utils.mongo import get_mongodb_connection, get_database
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

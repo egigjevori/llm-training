@@ -15,19 +15,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from zenml import pipeline, step
 from sentence_transformers import SentenceTransformer
-from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, PointStruct
-from mongo import get_mongodb_connection, get_database
+from qdrant_client.models import PointStruct
+from utils.mongo import get_mongodb_connection, get_database
+from utils.qdrant import create_collection, upsert_points
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def get_qdrant_client() -> QdrantClient:
-    """Get Qdrant client with environment configuration."""
-    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
-    return QdrantClient(host=qdrant_host, port=qdrant_port)
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -39,24 +34,10 @@ def get_embedding_model() -> SentenceTransformer:
 def initialize_qdrant() -> None:
     """Initialize Qdrant collections for corporate data."""
     try:
-        client = get_qdrant_client()
         collections = ["corporate_data"]
         
         for collection_name in collections:
-            try:
-                # Delete existing collection if it exists
-                client.get_collection(collection_name)
-                client.delete_collection(collection_name)
-                logger.info(f"Deleted existing collection: {collection_name}")
-            except:
-                logger.info(f"Collection {collection_name} does not exist")
-            
-            # Create new collection
-            client.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
-            )
-            logger.info(f"Created collection: {collection_name}")
+            create_collection(collection_name, vector_size=1024, recreate=True)
 
     except Exception as e:
         logger.error(f"Error initializing Qdrant: {e}")
@@ -124,8 +105,6 @@ def generate_embeddings(chunks: List[Dict]) -> List[Dict]:
 def store_in_qdrant(chunks: List[Dict], collection_name: str) -> None:
     """Store embedded chunks in Qdrant."""
     try:
-        client = get_qdrant_client()
-        
         points = [
             PointStruct(
                 id=chunk['id'],
@@ -137,8 +116,7 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> None:
             ) for chunk in chunks
         ]
         
-        client.upsert(collection_name=collection_name, points=points)
-        logger.info(f"Stored {len(points)} points in Qdrant collection: {collection_name}")
+        upsert_points(collection_name, points)
 
     except Exception as e:
         logger.error(f"Error storing in Qdrant: {e}")
