@@ -8,7 +8,7 @@ import json
 import os
 import torch
 from typing import Dict, List, Tuple, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from datasets.arrow_dataset import Dataset
 
@@ -48,7 +48,7 @@ class TrainingConfig:
     lora_r: int = 16  # Increased for more adaptation capacity
     lora_alpha: int = 32  # Increased for stronger adaptation
     lora_dropout: float = 0.05  # Reduced for less regularization
-    target_modules: List[str] = None  # Will auto-detect if None
+    target_modules: List[str] = field(default_factory=lambda: ["c_attn", "c_proj", "c_fc"])
     
     # Training configuration
     num_epochs: int = 3
@@ -64,7 +64,7 @@ class TrainingConfig:
     # Memory optimization configuration
     gradient_checkpointing: bool = True  # Enable gradient checkpointing
     use_flash_attention: bool = True  # Use flash attention if available
-    max_memory: Dict[str, str] = None  # Memory limits for different devices
+    max_memory: Dict[str, str] = field(default_factory=lambda: {"mps": "8GB", "cpu": "16GB"})
     offload_folder: str = "offload"  # Folder for CPU offloading
     cpu_offload: bool = True  # Enable CPU offloading for inactive layers
     
@@ -72,33 +72,6 @@ class TrainingConfig:
     output_dir: str = "models/finetuned_model"
     save_total_limit: int = 3
     
-    def __post_init__(self):
-        if self.target_modules is None:
-            # Default target modules for most transformer models
-            # For DialoGPT, we'll use the attention modules
-            self.target_modules = ["c_attn", "c_proj", "c_fc"]
-        
-        # Set memory limits for different devices
-        if self.max_memory is None:
-            import torch
-            if torch.cuda.is_available():
-                # GPU memory limits (adjust based on your GPU)
-                gpu_memory = "8GB"  # Adjust this value based on your GPU
-                self.max_memory = {
-                    "0": gpu_memory,
-                    "cpu": "16GB"
-                }
-            elif torch.backends.mps.is_available():
-                # Apple Silicon memory limits
-                self.max_memory = {
-                    "mps": "8GB",
-                    "cpu": "16GB"
-                }
-            else:
-                # CPU-only memory limits
-                self.max_memory = {
-                    "cpu": "16GB"
-                }
 
 
 @step(enable_cache=False)
