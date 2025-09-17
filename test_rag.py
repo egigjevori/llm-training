@@ -1,6 +1,6 @@
 """
-Test script for the RAG pipeline
-Refactored version with minimal duplication
+Test script for the UK Companies House RAG pipeline
+Tests the updated pipeline with bge-small-en-v1.5 embeddings
 """
 
 import os
@@ -28,17 +28,23 @@ def search_qdrant(query: str, collection_name: str, top_k: int = 5) -> List[Dict
         return []
 
 
-def display_corporate_results(results: List[Dict], query: str):
-    """Display corporate search results."""
+def display_uk_companies_results(results: List[Dict], query: str):
+    """Display UK companies search results."""
     print(f"\n{'='*60}")
-    print(f"SEARCHING CORPORATE DATA: {query}")
+    print(f"SEARCHING UK COMPANIES: {query}")
     print(f"{'='*60}")
-    
+
     for i, result in enumerate(results, 1):
+        metadata = result['metadata']
         print(f"\n--- Result {i} (Score: {result['score']:.3f}) ---")
-        print(f"Company: {result['metadata'].get('company_name', 'Unknown')}")
-        print(f"Company ID: {result['metadata'].get('company_id', 'Unknown')}")
-        print(f"Text: {result['text']}")
+        print(f"Company: {metadata.get('company_name', 'Unknown')}")
+        print(f"Company Number: {metadata.get('company_number', 'Unknown')}")
+        print(f"Status: {metadata.get('status', 'Unknown')}")
+        print(f"Category: {metadata.get('category', 'Unknown')}")
+        print(f"Address: {metadata.get('full_address', 'Unknown')}")
+        print(f"SIC Codes: {metadata.get('sic_codes', [])}")
+        print(f"Incorporation Date: {metadata.get('incorporation_date', 'Unknown')}")
+        print(f"Text: {result['text'][:200]}...")  # Limit text display
 
 
 
@@ -57,12 +63,12 @@ def test_rag_queries():
     
     # Test data - (query, collection, display_function)
     test_cases = [
-        # Corporate queries
-        ("software development company", "corporate_data", display_corporate_results),
-        ("construction company in Tirana", "corporate_data", display_corporate_results),
-        ("consulting services", "corporate_data", display_corporate_results),
-        ("restaurant or food business", "corporate_data", display_corporate_results),
-        
+        # UK Companies queries
+        ("software development company", "uk_companies", display_uk_companies_results),
+        ("construction company in London", "uk_companies", display_uk_companies_results),
+        ("consulting services", "uk_companies", display_uk_companies_results),
+        ("restaurant or food business", "uk_companies", display_uk_companies_results),
+        ("private limited company", "uk_companies", display_uk_companies_results),
 
     ]
     
@@ -73,31 +79,31 @@ def test_rag_queries():
 def check_collections_status():
     """Check the status of Qdrant collections."""
     try:
-        collections = ["corporate_data"]
-        
+        collections = ["uk_companies"]
+
         print("\n📊 Qdrant Collections Status:")
         print("="*40)
-        
+
         for collection_name in collections:
-            info = get_collection_info(collection_name)
-            if info:
+            try:
+                info = get_collection_info(collection_name)
                 print(f"{collection_name}: {info['count']} documents")
-            else:
-                print(f"{collection_name}: Not found or error")
-                
+            except Exception as e:
+                print(f"{collection_name}: Not found or error ({e})")
+
     except Exception as e:
         print(f"Error checking collections: {e}")
 
 
 if __name__ == "__main__":
-    print("🧪 RAG Pipeline Test Script")
-    
+    print("🧪 UK Companies House RAG Pipeline Test Script")
+
     # Check collection status first
     check_collections_status()
-    
+
     # Run test queries
     test_rag_queries()
-    
+
     print(f"\n{'='*60}")
-    print("✅ RAG Testing Complete!")
+    print("✅ UK Companies RAG Testing Complete!")
     print("="*60)
