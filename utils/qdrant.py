@@ -19,7 +19,8 @@ def get_embedding_model() -> SentenceTransformer:
     """Get embedding model (singleton)."""
     global _embedding_model
     if _embedding_model is None:
-        _embedding_model = SentenceTransformer("BAAI/bge-m3")
+        # Using smaller, faster model optimized for retrieval tasks
+        _embedding_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
     return _embedding_model
 
 
@@ -30,7 +31,7 @@ def get_qdrant_client() -> QdrantClient:
     return QdrantClient(host=qdrant_host, port=qdrant_port)
 
 
-def create_collection(collection_name: str, vector_size: int = 1024, 
+def create_collection(collection_name: str, vector_size: int = 384,
                      distance: Distance = Distance.COSINE, recreate: bool = True) -> None:
     """Create a collection in Qdrant."""
     try:

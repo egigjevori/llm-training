@@ -1,6 +1,6 @@
 """
-Simple ZenML RAG Pipeline for MongoDB to Qdrant
-Refactored version with minimal duplication
+UK Companies House ZenML RAG Pipeline
+MongoDB -> Chunking -> Embedding (bge-small-en-v1.5) -> Qdrant
 """
 
 import logging
@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 @step(enable_cache=False)
 def initialize_qdrant() -> None:
-    """Initialize Qdrant collections for corporate data."""
+    """Initialize Qdrant collections for UK companies data."""
     try:
-        collections = ["corporate_data"]
-        
+        collections = ["uk_companies"]
+
         for collection_name in collections:
-            create_collection(collection_name, vector_size=1024, recreate=True)
+            create_collection(collection_name, vector_size=384, recreate=True)
 
     except Exception as e:
         logger.error(f"Error initializing Qdrant: {e}")
@@ -58,15 +58,21 @@ def fetch_batch_from_mongo(db_name: str, collection_name: str, batch_size: int =
         raise
 
 
-def create_corporate_chunk(doc: Dict) -> Dict:
-    """Create a text chunk from corporate document using JSON directly."""
+def create_company_chunk(doc: Dict) -> Dict:
+    """Create a text chunk from UK company document using JSON directly."""
     return {
         'id': str(uuid4()),
         'text': json.dumps(doc, ensure_ascii=False, separators=(',', ':')),
         'metadata': {
-            'source': 'corporate',
-            'company_id': doc.get('company_id', 'unknown'),
-            'company_name': doc.get('name', 'unknown'),
+            'source': 'uk_companies_house',
+            'company_number': doc.get('company_number', 'unknown'),
+            'company_name': doc.get('company_name', 'unknown'),
+            'status': doc.get('status', 'unknown'),
+            'category': doc.get('category', ''),
+            'country': doc.get('country_of_origin', 'UK'),
+            'sic_codes': doc.get('sic_codes', []),
+            'full_address': doc.get('address', {}).get('full_address', ''),
+            'incorporation_date': doc.get('incorporation_date', ''),
             'original_doc': doc
         }
     }
@@ -112,41 +118,42 @@ def store_in_qdrant(chunks: List[Dict], collection_name: str) -> None:
 
 
 @step(enable_cache=False)
-def process_corporate_data(batch_size: int = 2, max_documents: int = 100) -> None:
-    """Process corporate data in batches with document limit."""
+def process_uk_companies_data(batch_size: int = 10, max_documents: int = 300) -> None:
+    """Process UK companies data in batches with document limit."""
     skip = 0
     total_processed = 0
-    
+
     while total_processed < max_documents:
         # Calculate remaining documents to process
         remaining = max_documents - total_processed
         current_batch_size = min(batch_size, remaining)
-        
-        # Fetch batch
-        documents = fetch_batch_from_mongo("opencorporates_albania", "companies", current_batch_size, skip)
-        
+
+        # Fetch batch from UK companies database
+        documents = fetch_batch_from_mongo("uk_companies_house", "companies", current_batch_size, skip)
+
         if not documents:
+            logger.info("No more documents found in UK companies database")
             break
-        
+
         # Process batch: chunk -> embed -> store
-        chunks = [create_corporate_chunk(doc) for doc in documents]
+        chunks = [create_company_chunk(doc) for doc in documents]
         embedded_chunks = generate_embeddings(chunks)
-        store_in_qdrant(embedded_chunks, "corporate_data")
-        
+        store_in_qdrant(embedded_chunks, "uk_companies")
+
         # Clear GPU cache to free memory
         if torch.backends.mps.is_available():
             torch.mps.empty_cache()
-        
+
         total_processed += len(documents)
-        logger.info(f"Processed corporate_data batch. Total so far: {total_processed}")
+        logger.info(f"Processed UK companies batch. Total so far: {total_processed}")
 
         skip += len(documents)
-        
+
         if total_processed >= max_documents:
             logger.info(f"Reached maximum limit of {max_documents} documents. Stopping processing.")
             break
-    
-    logger.info(f"Completed processing {total_processed} corporate documents")
+
+    logger.info(f"Completed processing {total_processed} UK company documents")
 
 
 
@@ -154,12 +161,12 @@ def process_corporate_data(batch_size: int = 2, max_documents: int = 100) -> Non
 
 @pipeline
 def rag_pipeline():
-    """Simple RAG pipeline: MongoDB -> Chunking -> Embedding -> Qdrant"""
+    """UK Companies House RAG pipeline: MongoDB -> Chunking -> Embedding -> Qdrant"""
     # Initialize Qdrant
     initialize_qdrant()
-    
-    # Process corporate data
-    process_corporate_data()
+
+    # Process UK companies data
+    process_uk_companies_data()
 
 
 if __name__ == "__main__":
