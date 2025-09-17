@@ -126,14 +126,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "location",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Find companies located in {location}.",
-            "response": f"To find companies located in {location}, you would search the corporate database for companies with location field matching '{location}'.",
-            "category": "search_query",
-            "source": "corporate"
-        })
-    
+
     # Registration date questions
     if is_meaningful(company.get('registration_date')):
         reg_date = company.get('registration_date')
@@ -145,14 +138,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "registration",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"How old is {company_name}?",
-            "response": f"To determine the age of {company_name}, you would calculate the difference between the current date and the registration date {reg_date}.",
-            "category": "calculation",
-            "source": "corporate"
-        })
-    
+
     # Status questions
     if is_meaningful(company.get('status')):
         status = company.get('status')
@@ -164,14 +150,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "status",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Show me all companies with status '{status}'.",
-            "response": f"To find all companies with status '{status}', you would filter the corporate database by status field.",
-            "category": "filter_query",
-            "source": "corporate"
-        })
-    
+
     # Legal form questions
     if is_meaningful(company.get('legal_form')):
         legal_form = company.get('legal_form')
@@ -183,14 +162,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "legal_form",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Compare {company_name} with other companies of the same legal form.",
-            "response": f"To compare {company_name} with other companies of the same legal form ({legal_form}), you would filter the database by legal form and analyze similarities in capital, location, and business activities.",
-            "category": "comparison_analysis",
-            "source": "corporate"
-        })
-    
+
     # Capital questions
     if is_meaningful(company.get('capital')):
         capital = company.get('capital')
@@ -202,14 +174,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "capital",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Find companies with capital similar to {company_name}.",
-            "response": f"To find companies with similar capital to {company_name} ({capital}), you would search the database for companies within a similar capital range or category.",
-            "category": "range_query",
-            "source": "corporate"
-        })
-    
+
     # Address questions
     if is_meaningful(company.get('address')):
         address = company.get('address')
@@ -219,13 +184,6 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "instruction": f"What is the address of {company_name}?",
             "response": f"The address of {company_name} is {address}.",
             "category": "address",
-            "source": "corporate"
-        })
-        
-        instructions.append({
-            "instruction": f"Analyze the geographic distribution of companies in the same area as {company_name}.",
-            "response": f"To analyze geographic distribution around {company_name} located at {address}, you would search for companies in the same district or area and analyze their business activities and legal forms.",
-            "category": "geographic_analysis",
             "source": "corporate"
         })
     
@@ -238,20 +196,6 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "instruction": f"What is the business activity of {company_name}?",
             "response": f"The business activity of {company_name} is: {business_activity}.",
             "category": "business_activity",
-            "source": "corporate"
-        })
-        
-        instructions.append({
-            "instruction": f"Find companies in the same industry as {company_name}.",
-            "response": f"To find companies in the same industry as {company_name} which operates in {business_activity}, you would search the database for companies with similar business activity descriptions.",
-            "category": "industry_search",
-            "source": "corporate"
-        })
-        
-        instructions.append({
-            "instruction": f"Classify the business activity of {company_name} into a standard industry category.",
-            "response": f"Based on the business activity '{business_activity}', {company_name} would be classified into the appropriate industry category based on the nature of their operations.",
-            "category": "classification",
             "source": "corporate"
         })
     
@@ -267,13 +211,6 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "management",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Find other companies managed by the same administrators as {company_name}.",
-            "response": f"To find other companies managed by the same administrators ({admin_list}) as {company_name}, you would search the database for companies with matching administrator names.",
-            "category": "network_analysis",
-            "source": "corporate"
-        })
     
     # Shareholder questions
     if company.get('shareholders') and len(company.get('shareholders', [])) > 0:
@@ -287,14 +224,7 @@ def generate_corporate_instructions(company: Dict) -> List[Dict]:
             "category": "ownership",
             "source": "corporate"
         })
-        
-        instructions.append({
-            "instruction": f"Analyze the ownership network for {company_name}.",
-            "response": f"To analyze the ownership network for {company_name}, you would examine the shareholders ({shareholder_list}) and potentially find other companies where these same individuals or entities are shareholders.",
-            "category": "network_analysis",
-            "source": "corporate"
-        })
-    
+
     # Currency information
     if is_meaningful(company.get('currency')):
         currency = company.get('currency')
@@ -443,7 +373,7 @@ def generate_dataset_statistics(instructions: List[Dict]) -> Dict:
 
 @pipeline
 def instruction_dataset_pipeline(
-    corporate_limit: int = 100,
+    corporate_limit: int = 5,
     output_path: str = "datasets/instruction_dataset.jsonl"
 ):
     """Main pipeline for generating custom instruction dataset from corporate data."""

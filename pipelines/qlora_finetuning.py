@@ -7,6 +7,7 @@ import logging
 import json
 import os
 import torch
+import math
 from typing import Dict, List, Tuple, Union
 from dataclasses import dataclass, field
 
@@ -23,7 +24,8 @@ from transformers import (
     Trainer,
     DataCollatorForLanguageModeling,
     PreTrainedModel,
-    PreTrainedTokenizerBase
+    PreTrainedTokenizerBase,
+    TrainerCallback
 )
 from peft import (
     LoraConfig,
@@ -35,11 +37,78 @@ from peft import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class NumericalStabilityCallback(TrainerCallback):
+    """Callback to monitor numerical stability during training."""
+    
+    def __init__(self):
+        self.step_count = 0
+        self.nan_detected = False
+        
+    def on_step_end(self, args, state, control, **kwargs):
+        """Check for numerical issues after each step."""
+        self.step_count += 1
+        
+        # Get the model from kwargs
+        model = kwargs.get('model')
+        if model is None:
+            return control
+            
+        # Check for NaN in model parameters
+        for name, param in model.named_parameters():
+            if param.requires_grad and param.grad is not None:
+                if torch.isnan(param.grad).any():
+                    logger.error(f"Step {self.step_count}: NaN detected in gradients for {name}")
+                    self.nan_detected = True
+                    control.should_training_stop = True
+                    return control
+                    
+                # Check gradient norm
+                grad_norm = param.grad.data.norm()
+                if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                    logger.error(f"Step {self.step_count}: Invalid gradient norm for {name}: {grad_norm}")
+                    self.nan_detected = True
+                    control.should_training_stop = True
+                    return control
+                    
+                # Log large gradients
+                if grad_norm > 100.0:
+                    logger.warning(f"Step {self.step_count}: Large gradient norm for {name}: {grad_norm:.4f}")
+                    
+            # Check for NaN in parameters themselves
+            if torch.isnan(param.data).any():
+                logger.error(f"Step {self.step_count}: NaN detected in parameter {name}")
+                self.nan_detected = True
+                control.should_training_stop = True
+                return control
+                
+        return control
+        
+    def on_log(self, args, state, control, **kwargs):
+        """Monitor logged metrics for issues."""
+        logs = kwargs.get('logs', {})
+        
+        for key, value in logs.items():
+            if isinstance(value, (int, float)):
+                if math.isnan(value) or math.isinf(value):
+                    logger.error(f"Step {self.step_count}: Invalid value in logs - {key}: {value}")
+                    self.nan_detected = True
+                    control.should_training_stop = True
+                    return control
+                    
+                # Log unusual loss values
+                if key == 'loss':
+                    if value == 0.0:
+                        logger.warning(f"Step {self.step_count}: Loss is exactly 0.0 - possible numerical issue")
+                    elif value > 1000:
+                        logger.warning(f"Step {self.step_count}: Very high loss: {value}")
+                        
+        return control
+
 @dataclass
 class TrainingConfig:
     """Configuration for QLoRA fine-tuning."""
     # Model configuration
-    base_model: str = "microsoft/DialoGPT-medium"  # Can be changed to other models
+    base_model: str = "Qwen/Qwen2.5-1.5B-Instruct"  # Smaller model for faster training
     max_length: int = 512
     padding: bool = True
     truncation: bool = True
@@ -48,13 +117,13 @@ class TrainingConfig:
     lora_r: int = 16  # Increased for more adaptation capacity
     lora_alpha: int = 32  # Increased for stronger adaptation
     lora_dropout: float = 0.05  # Reduced for less regularization
-    target_modules: List[str] = field(default_factory=lambda: ["c_attn", "c_proj", "c_fc"])
+    target_modules: List[str] = field(default_factory=lambda: ["q_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"])
     
     # Training configuration
     num_epochs: int = 3
-    batch_size: int = 2  # Increased if memory allows
-    gradient_accumulation_steps: int = 4  # Reduced (effective batch = 8)
-    learning_rate: float = 1e-5  # Increased for better learning
+    batch_size: int = 4  # Higher batch size for smaller model
+    gradient_accumulation_steps: int = 2  # Reduced steps (effective batch = 8) 
+    learning_rate: float = 1e-5  # Slightly higher LR for smaller model
     warmup_steps: int = 50  # Gentle warmup
     weight_decay: float = 0.001  # Reduced regularization
     logging_steps: int = 10
@@ -75,7 +144,7 @@ class TrainingConfig:
 
 
 @step(enable_cache=False)
-def load_instruction_dataset(dataset_path: str = "datasets/instruction_dataset.jsonl") -> Dataset:
+def load_instruction_dataset(dataset_path: str = "pipelines/datasets/instruction_dataset.jsonl") -> Dataset:
     """Load and prepare the instruction dataset."""
     try:
         logger.info(f"Loading instruction dataset from {dataset_path}")
@@ -117,10 +186,10 @@ def prepare_model_and_tokenizer(config: TrainingConfig) -> Tuple[PreTrainedToken
             os.makedirs(config.offload_folder, exist_ok=True)
             logger.info(f"CPU offload directory created: {config.offload_folder}")
         
-        # Load model without quantization but with memory optimization
+        # Load model with float32 for better numerical stability
         model = AutoModelForCausalLM.from_pretrained(
             config.base_model,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.float32,  # Use float32 for stability
             device_map="auto",
             trust_remote_code=True,
             max_memory=config.max_memory,
@@ -179,13 +248,16 @@ def preprocess_dataset(dataset: Dataset, tokenizer: PreTrainedTokenizerBase, con
         
         def tokenize_function(examples):
             """Tokenize the text data."""
-            return tokenizer(
+            # Don't return tensors here - let the data collator handle that
+            result = tokenizer(
                 examples["text"],
                 truncation=config.truncation,
-                padding=config.padding,
+                padding=False,  # Let data collator handle padding
                 max_length=config.max_length,
-                return_tensors="pt"
+                return_tensors=None  # Return lists, not tensors
             )
+            # Labels will be created by the data collator
+            return result
         
         # Format the dataset with memory-efficient processing
         logger.info("Formatting dataset...")
@@ -243,7 +315,8 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
             logging_steps=config.logging_steps,
             save_steps=config.save_steps,
             save_total_limit=config.save_total_limit,
-            fp16=False,
+            fp16=False,  # Disable mixed precision for numerical stability
+            bf16=False,  # Also disable bfloat16
             # Learning rate schedule
             lr_scheduler_type="cosine",
             warmup_ratio=0.05,  # 5% of total steps
@@ -260,8 +333,8 @@ def setup_training_arguments(config: TrainingConfig) -> TrainingArguments:
             dataloader_prefetch_factor=None,  # Disable prefetching
             # Gradient checkpointing (already enabled in model, but ensure it's set here too)
             gradient_checkpointing=config.gradient_checkpointing,
-            # Memory-efficient optimizations
-            max_grad_norm=1.0,  # Relaxed gradient clipping for better learning
+            # Strict gradient clipping to prevent NaN
+            max_grad_norm=0.5,  # More aggressive gradient clipping
             # Save memory during evaluation
             eval_strategy="steps" if config.eval_steps > 0 else "no",
             eval_steps=config.eval_steps,
@@ -301,13 +374,40 @@ def train_model(
         logger.info(f"Training samples: {len(train_dataset)}")
         logger.info(f"Validation samples: {len(eval_dataset)}")
 
-        # Setup data collator
-        data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer,
-            mlm=False,
-        )
+        # Setup custom data collator that handles labels properly
+        from transformers import default_data_collator
+        from transformers.data.data_collator import DataCollatorMixin
+        import torch
         
-        # Initialize trainer
+        class CustomDataCollatorForCausalLM:
+            def __init__(self, tok):
+                self.tokenizer = tok
+                
+            def __call__(self, batch):
+                # Pad the batch
+                batch = self.tokenizer.pad(
+                    batch,
+                    padding=True,
+                    max_length=None,
+                    pad_to_multiple_of=8,
+                    return_tensors="pt"
+                )
+                
+                # Create labels from input_ids for causal LM
+                batch["labels"] = batch["input_ids"].clone()
+                
+                # Set padding tokens to -100 so they're ignored in loss
+                if self.tokenizer.pad_token_id is not None:
+                    batch["labels"][batch["labels"] == self.tokenizer.pad_token_id] = -100
+                    
+                return batch
+        
+        data_collator = CustomDataCollatorForCausalLM(tokenizer)
+        
+        # Initialize numerical stability callback
+        stability_callback = NumericalStabilityCallback()
+        
+        # Initialize trainer with callback
         trainer = Trainer(
             model=model,
             args=training_args,
@@ -315,6 +415,7 @@ def train_model(
             eval_dataset=eval_dataset,
             data_collator=data_collator,
             processing_class=tokenizer,
+            callbacks=[stability_callback],
         )
 
         # Train the model
@@ -546,8 +647,8 @@ if __name__ == "__main__":
 
 @pipeline
 def qlora_finetuning_pipeline(
-    dataset_path: str = "datasets/instruction_dataset.jsonl",
-    base_model: str = "microsoft/DialoGPT-medium",
+    dataset_path: str = "pipelines/datasets/instruction_dataset.jsonl",
+    base_model: str = "Qwen/Qwen2.5-1.5B-Instruct",
     num_epochs: int = 3,
     batch_size: int = 1,
     learning_rate: float = 2e-4,
