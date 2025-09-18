@@ -1,6 +1,6 @@
 """
-Custom Instruction Dataset Generation Pipeline using ZenML
-Generates diverse instruction-response pairs from corporate data
+UK Companies Instruction Dataset Generation Pipeline using ZenML
+Generates diverse instruction-response pairs from UK Companies House data
 """
 
 import logging
@@ -22,27 +22,34 @@ logger = logging.getLogger(__name__)
 
 
 @step(enable_cache=False)
-def fetch_corporate_data(limit: int = 1000) -> List[Dict]:
-    """Fetch corporate data from MongoDB."""
+def fetch_uk_companies(limit: int = 1000) -> List[Dict]:
+    """Fetch UK Companies House data from MongoDB."""
     try:
         client = get_mongodb_connection()
-        db = get_database(client, "opencorporates_albania")
+        db = get_database(client, "uk_companies_house")
         collection = db["companies"]
-        
-        # Fetch documents with limit
-        documents = list(collection.find().limit(limit))
-        
+
+        # Fetch active companies first, then dissolved ones for diversity
+        active_companies = list(collection.find({"status": "Active"}).limit(limit // 2))
+        remaining_limit = limit - len(active_companies)
+
+        if remaining_limit > 0:
+            other_companies = list(collection.find({"status": {"$ne": "Active"}}).limit(remaining_limit))
+            documents = active_companies + other_companies
+        else:
+            documents = active_companies
+
         # Convert ObjectId to string for JSON serialization
         for doc in documents:
             if '_id' in doc:
                 doc['_id'] = str(doc['_id'])
-        
+
         client.close()
-        logger.info(f"Fetched {len(documents)} corporate documents")
+        logger.info(f"Fetched {len(documents)} UK companies (Active: {len(active_companies)}, Other: {len(documents) - len(active_companies)})")
         return documents
-        
+
     except Exception as e:
-        logger.error(f"Error fetching corporate data: {e}")
+        logger.error(f"Error fetching UK companies data: {e}")
         raise
 
 
@@ -58,258 +65,352 @@ def clean_text(text: str) -> str:
     return text
 
 
-def generate_corporate_instructions(company: Dict) -> List[Dict]:
-    """Generate instruction-response pairs from corporate data."""
+def generate_uk_company_instructions(company: Dict) -> List[Dict]:
+    """Generate instruction-response pairs from UK Companies House data."""
     instructions = []
-    
+
     # Helper function to check if value is meaningful
     def is_meaningful(value):
-        if not value or value == "Unknown" or value == "-" or value == "":
+        if not value or value == "Unknown" or value == "-" or value == "" or value == "N/A":
             return False
         return True
-    
+
+    # Get company basic info
+    company_name = clean_text(company.get('company_name', ''))
+    company_number = company.get('company_number', '')
+
+    if not is_meaningful(company_name) or not is_meaningful(company_number):
+        return instructions
+
     # Basic company information questions
-    if is_meaningful(company.get('name')):
-        company_name = company.get('name', '').strip('"')  # Remove quotes
-        company_id = company.get('company_id', 'N/A')
-        
-        instructions.append({
-            "instruction": f"What is the name of the company with company ID {company_id}?",
-            "response": f"The company name is {company_name}.",
-            "category": "company_info",
-            "source": "corporate"
-        })
-        
-        # Company description
-        description = company.get('description', '')
-        if is_meaningful(description):
-            instructions.append({
-                "instruction": f"Tell me about the company {company_name}.",
-                "response": f"{company_name} is a company registered in Albania with company ID {company_id}. {description}",
-                "category": "company_description",
-                "source": "corporate"
-            })
-        
-        # Company summary with available data
-        location = company.get('location', 'Unknown location')
-        reg_date = company.get('registration_date', 'Unknown date')
-        status = company.get('status', 'Unknown')
-        legal_form = company.get('legal_form', 'Unknown')
-        
-        summary_parts = [f"{company_name} is a company registered in Albania with company ID {company_id}"]
-        if is_meaningful(location):
-            summary_parts.append(f"located in {location}")
-        if is_meaningful(reg_date):
-            summary_parts.append(f"registered on {reg_date}")
-        if is_meaningful(status):
-            summary_parts.append(f"with status {status}")
-        if is_meaningful(legal_form):
-            summary_parts.append(f"and legal form {legal_form}")
-        if is_meaningful(description):
-            summary_parts.append(description)
-        
-        instructions.append({
-            "instruction": f"Provide a summary of {company_name} including key details.",
-            "response": ". ".join(summary_parts) + ".",
-            "category": "company_summary",
-            "source": "corporate"
-        })
-    
-    # Location-based questions
-    if is_meaningful(company.get('location')):
-        location = company.get('location')
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"Where is {company_name} located?",
-            "response": f"{company_name} is located in {location}.",
-            "category": "location",
-            "source": "corporate"
-        })
+    instructions.append({
+        "instruction": f"What is the company number for {company_name}?",
+        "response": f"The company number for {company_name} is {company_number}.",
+        "category": "company_info",
+        "source": "uk_companies"
+    })
 
-    # Registration date questions
-    if is_meaningful(company.get('registration_date')):
-        reg_date = company.get('registration_date')
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"When was {company_name} registered?",
-            "response": f"{company_name} was registered on {reg_date}.",
-            "category": "registration",
-            "source": "corporate"
-        })
+    instructions.append({
+        "instruction": f"What is the name of the company with number {company_number}?",
+        "response": f"The company with number {company_number} is {company_name}.",
+        "category": "company_info",
+        "source": "uk_companies"
+    })
 
-    # Status questions
-    if is_meaningful(company.get('status')):
-        status = company.get('status')
-        company_name = company.get('name', 'this company').strip('"')
-        
+    # Company status
+    status = company.get('status', '')
+    if is_meaningful(status):
         instructions.append({
             "instruction": f"What is the current status of {company_name}?",
             "response": f"The current status of {company_name} is {status}.",
             "category": "status",
-            "source": "corporate"
+            "source": "uk_companies"
         })
 
-    # Legal form questions
-    if is_meaningful(company.get('legal_form')):
-        legal_form = company.get('legal_form')
-        company_name = company.get('name', 'this company').strip('"')
-        
+    # Company category/type
+    category = company.get('category', '')
+    if is_meaningful(category):
         instructions.append({
-            "instruction": f"What is the legal form of {company_name}?",
-            "response": f"The legal form of {company_name} is {legal_form}.",
-            "category": "legal_form",
-            "source": "corporate"
+            "instruction": f"What type of company is {company_name}?",
+            "response": f"{company_name} is a {category}.",
+            "category": "company_type",
+            "source": "uk_companies"
         })
 
-    # Capital questions
-    if is_meaningful(company.get('capital')):
-        capital = company.get('capital')
-        company_name = company.get('name', 'this company').strip('"')
-        
         instructions.append({
-            "instruction": f"What is the capital of {company_name}?",
-            "response": f"The capital of {company_name} is {capital}.",
-            "category": "capital",
-            "source": "corporate"
+            "instruction": f"What is the legal structure of {company_name}?",
+            "response": f"The legal structure of {company_name} is {category}.",
+            "category": "company_type",
+            "source": "uk_companies"
         })
 
-    # Address questions
-    if is_meaningful(company.get('address')):
-        address = company.get('address')
-        company_name = company.get('name', 'this company').strip('"')
-        
+    # Incorporation date
+    incorporation_date = company.get('incorporation_date', '')
+    if is_meaningful(incorporation_date):
         instructions.append({
-            "instruction": f"What is the address of {company_name}?",
-            "response": f"The address of {company_name} is {address}.",
+            "instruction": f"When was {company_name} incorporated?",
+            "response": f"{company_name} was incorporated on {incorporation_date}.",
+            "category": "incorporation",
+            "source": "uk_companies"
+        })
+
+        instructions.append({
+            "instruction": f"What is the incorporation date of {company_name}?",
+            "response": f"The incorporation date of {company_name} is {incorporation_date}.",
+            "category": "incorporation",
+            "source": "uk_companies"
+        })
+
+    # Address information
+    address = company.get('address', {})
+    if address and is_meaningful(address.get('full_address', '')):
+        full_address = address.get('full_address', '')
+        instructions.append({
+            "instruction": f"What is the registered address of {company_name}?",
+            "response": f"The registered address of {company_name} is {full_address}.",
             "category": "address",
-            "source": "corporate"
-        })
-    
-    # Business activity questions
-    if is_meaningful(company.get('business_object')):
-        business_activity = company.get('business_object')
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"What is the business activity of {company_name}?",
-            "response": f"The business activity of {company_name} is: {business_activity}.",
-            "category": "business_activity",
-            "source": "corporate"
-        })
-    
-    # Administrator questions
-    if company.get('administrators') and len(company.get('administrators', [])) > 0:
-        admins = company.get('administrators', [])
-        admin_list = ", ".join(admins)
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"Who are the administrators of {company_name}?",
-            "response": f"The administrators of {company_name} are: {admin_list}.",
-            "category": "management",
-            "source": "corporate"
-        })
-    
-    # Shareholder questions
-    if company.get('shareholders') and len(company.get('shareholders', [])) > 0:
-        shareholders = company.get('shareholders', [])
-        shareholder_list = ", ".join(shareholders)
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"Who are the shareholders of {company_name}?",
-            "response": f"The shareholders of {company_name} are: {shareholder_list}.",
-            "category": "ownership",
-            "source": "corporate"
+            "source": "uk_companies"
         })
 
-    # Currency information
-    if is_meaningful(company.get('currency')):
-        currency = company.get('currency')
-        company_name = company.get('name', 'this company').strip('"')
-        
+        post_town = address.get('post_town', '')
+        if is_meaningful(post_town):
+            instructions.append({
+                "instruction": f"In which town is {company_name} registered?",
+                "response": f"{company_name} is registered in {post_town}.",
+                "category": "location",
+                "source": "uk_companies"
+            })
+
+        county = address.get('county', '')
+        if is_meaningful(county):
+            instructions.append({
+                "instruction": f"In which county is {company_name} located?",
+                "response": f"{company_name} is located in {county}.",
+                "category": "location",
+                "source": "uk_companies"
+            })
+
+    # SIC codes (industry classification)
+    sic_codes = company.get('sic_codes', [])
+    if sic_codes and len(sic_codes) > 0:
+        primary_sic = sic_codes[0]
         instructions.append({
-            "instruction": f"What currency does {company_name} use?",
-            "response": f"{company_name} uses {currency} as its currency.",
-            "category": "financial_info",
-            "source": "corporate"
+            "instruction": f"What industry does {company_name} operate in?",
+            "response": f"{company_name} operates in: {primary_sic}.",
+            "category": "industry",
+            "source": "uk_companies"
         })
-    
-    # District information
-    if is_meaningful(company.get('region')):
-        district = company.get('region')
-        company_name = company.get('name', 'this company').strip('"')
-        
-        instructions.append({
-            "instruction": f"In which district is {company_name} located?",
-            "response": f"{company_name} is located in the district of {district}.",
-            "category": "geographic_info",
-            "source": "corporate"
-        })
-    
+
+        if len(sic_codes) > 1:
+            all_sics = "; ".join(sic_codes)
+            instructions.append({
+                "instruction": f"What are all the business activities of {company_name}?",
+                "response": f"The business activities of {company_name} include: {all_sics}.",
+                "category": "industry",
+                "source": "uk_companies"
+            })
+
+    # Accounts information
+    accounts = company.get('accounts', {})
+    if accounts:
+        accounts_category = accounts.get('category', '')
+        if is_meaningful(accounts_category):
+            instructions.append({
+                "instruction": f"What is the accounts category for {company_name}?",
+                "response": f"The accounts category for {company_name} is {accounts_category}.",
+                "category": "accounts",
+                "source": "uk_companies"
+            })
+
+        next_due = accounts.get('next_due', '')
+        if is_meaningful(next_due):
+            instructions.append({
+                "instruction": f"When are the next accounts due for {company_name}?",
+                "response": f"The next accounts for {company_name} are due on {next_due}.",
+                "category": "accounts",
+                "source": "uk_companies"
+            })
+
+    # Mortgages/charges information
+    mortgages = company.get('mortgages', {})
+    if mortgages:
+        total_charges = mortgages.get('charges', 0)
+        outstanding = mortgages.get('outstanding', 0)
+
+        if total_charges > 0:
+            instructions.append({
+                "instruction": f"Does {company_name} have any charges registered against it?",
+                "response": f"Yes, {company_name} has {total_charges} charges registered, with {outstanding} outstanding.",
+                "category": "charges",
+                "source": "uk_companies"
+            })
+        else:
+            instructions.append({
+                "instruction": f"Does {company_name} have any charges registered against it?",
+                "response": f"No, {company_name} has no charges registered against it.",
+                "category": "charges",
+                "source": "uk_companies"
+            })
+
+    # Previous names
+    previous_names = company.get('previous_names', [])
+    if previous_names and len(previous_names) > 0:
+        latest_previous = previous_names[0]
+        old_name = latest_previous.get('name', '')
+        change_date = latest_previous.get('date', '')
+
+        if is_meaningful(old_name):
+            instructions.append({
+                "instruction": f"Has {company_name} had any previous names?",
+                "response": f"Yes, {company_name} was previously known as {old_name}" + (f" until {change_date}" if is_meaningful(change_date) else "") + ".",
+                "category": "history",
+                "source": "uk_companies"
+            })
+
+    # Confirmation statement
+    confirmation_statement = company.get('confirmation_statement', {})
+    if confirmation_statement:
+        next_due = confirmation_statement.get('next_due', '')
+        if is_meaningful(next_due):
+            instructions.append({
+                "instruction": f"When is the next confirmation statement due for {company_name}?",
+                "response": f"The next confirmation statement for {company_name} is due on {next_due}.",
+                "category": "confirmation_statement",
+                "source": "uk_companies"
+            })
+
+    # Company overview/summary
+    summary_parts = [f"{company_name} (company number: {company_number})"]
+
+    if is_meaningful(category):
+        summary_parts.append(f"is a {category}")
+    if is_meaningful(status):
+        summary_parts.append(f"with status {status}")
+    if is_meaningful(incorporation_date):
+        summary_parts.append(f"incorporated on {incorporation_date}")
+    if address and is_meaningful(address.get('post_town', '')):
+        summary_parts.append(f"based in {address.get('post_town')}")
+    if sic_codes and len(sic_codes) > 0:
+        summary_parts.append(f"operating in {sic_codes[0].split(' - ')[1] if ' - ' in sic_codes[0] else sic_codes[0]}")
+
+    instructions.append({
+        "instruction": f"Provide an overview of {company_name}.",
+        "response": " ".join(summary_parts) + ".",
+        "category": "overview",
+        "source": "uk_companies"
+    })
+
     return instructions
 
-def generate_comparison_instructions(corporate_data: List[Dict]) -> List[Dict]:
-    """Generate comparison-based instruction-response pairs."""
+def generate_uk_comparison_instructions(uk_companies: List[Dict]) -> List[Dict]:
+    """Generate comparison-based instruction-response pairs from UK companies data."""
     instructions = []
-    
-    # Compare companies in same location
+
+    def is_meaningful(value):
+        return value and value != "Unknown" and value != "-" and value != ""
+
+    # Group companies by location (post_town)
     location_companies = {}
-    for company in corporate_data:
-        location = company.get('location', 'Unknown')
-        if location != "Unknown":
-            if location not in location_companies:
-                location_companies[location] = []
-            location_companies[location].append(company)
-    
-    for location, companies in location_companies.items():
+    for company in uk_companies:
+        address = company.get('address', {})
+        post_town = address.get('post_town', '') if address else ''
+        company_name = company.get('company_name', '')
+
+        if is_meaningful(post_town) and is_meaningful(company_name):
+            if post_town not in location_companies:
+                location_companies[post_town] = []
+            location_companies[post_town].append(company)
+
+    # Generate location-based questions
+    for post_town, companies in location_companies.items():
         if len(companies) >= 2:
-            company_names = [c.get('name', 'Unknown') for c in companies[:3]]  # Limit to 3 companies
-            company_names = [name for name in company_names if name != "Unknown"]
-            
+            company_names = [c.get('company_name', '') for c in companies[:5]]  # Limit to 5 companies
+            company_names = [name for name in company_names if is_meaningful(name)]
+
             if len(company_names) >= 2:
                 instructions.append({
-                    "instruction": f"Which companies are located in {location}?",
-                    "response": f"The following companies are located in {location}: {', '.join(company_names)}.",
-                    "category": "comparison",
-                    "source": "corporate"
+                    "instruction": f"Which companies are registered in {post_town}?",
+                    "response": f"Companies registered in {post_town} include: {', '.join(company_names)}.",
+                    "category": "location_comparison",
+                    "source": "uk_companies"
                 })
-                
-                # Location-based business analysis
-                instructions.append({
-                    "instruction": f"Analyze the business landscape in {location}.",
-                    "response": f"To analyze the business landscape in {location}, you would examine all companies in this area, their business activities, legal forms, and economic indicators to understand the local business environment.",
-                    "category": "landscape_analysis",
-                    "source": "corporate"
-                })
-    
 
-    
+    # Group companies by industry (SIC codes)
+    industry_companies = {}
+    for company in uk_companies:
+        sic_codes = company.get('sic_codes', [])
+        company_name = company.get('company_name', '')
+
+        if sic_codes and len(sic_codes) > 0 and is_meaningful(company_name):
+            primary_industry = sic_codes[0].split(' - ')[1] if ' - ' in sic_codes[0] else sic_codes[0]
+
+            if primary_industry not in industry_companies:
+                industry_companies[primary_industry] = []
+            industry_companies[primary_industry].append(company)
+
+    # Generate industry-based questions
+    for industry, companies in industry_companies.items():
+        if len(companies) >= 2:
+            company_names = [c.get('company_name', '') for c in companies[:3]]  # Limit to 3 companies
+            company_names = [name for name in company_names if is_meaningful(name)]
+
+            if len(company_names) >= 2:
+                instructions.append({
+                    "instruction": f"Which companies operate in {industry}?",
+                    "response": f"Companies operating in {industry} include: {', '.join(company_names)}.",
+                    "category": "industry_comparison",
+                    "source": "uk_companies"
+                })
+
+    # Group companies by status
+    status_companies = {}
+    for company in uk_companies:
+        status = company.get('status', '')
+        company_name = company.get('company_name', '')
+
+        if is_meaningful(status) and is_meaningful(company_name):
+            if status not in status_companies:
+                status_companies[status] = []
+            status_companies[status].append(company)
+
+    # Generate status comparison questions
+    active_count = len(status_companies.get('Active', []))
+    dissolved_count = len(status_companies.get('Dissolved', []))
+    liquidation_count = len(status_companies.get('Liquidation', []))
+
+    if active_count > 0 and dissolved_count > 0:
+        instructions.append({
+            "instruction": "How many active companies are there compared to dissolved companies?",
+            "response": f"There are {active_count} active companies and {dissolved_count} dissolved companies in this dataset.",
+            "category": "status_analysis",
+            "source": "uk_companies"
+        })
+
+    # Company category comparison
+    category_companies = {}
+    for company in uk_companies:
+        category = company.get('category', '')
+        if is_meaningful(category):
+            if category not in category_companies:
+                category_companies[category] = 0
+            category_companies[category] += 1
+
+    if len(category_companies) >= 2:
+        sorted_categories = sorted(category_companies.items(), key=lambda x: x[1], reverse=True)
+        top_categories = sorted_categories[:3]
+
+        category_text = ", ".join([f"{count} {category}s" for category, count in top_categories])
+
+        instructions.append({
+            "instruction": "What are the most common types of companies in this dataset?",
+            "response": f"The most common company types are: {category_text}.",
+            "category": "category_analysis",
+            "source": "uk_companies"
+        })
+
     return instructions
 
 
 @step(enable_cache=False)
-def generate_instruction_dataset(corporate_data: List[Dict]) -> List[Dict]:
-    """Generate comprehensive instruction dataset from corporate data."""
+def generate_instruction_dataset(uk_companies: List[Dict]) -> List[Dict]:
+    """Generate comprehensive instruction dataset from UK companies data."""
     all_instructions = []
-    
-    logger.info("Generating corporate instructions...")
-    for company in corporate_data:
-        company_instructions = generate_corporate_instructions(company)
+
+    logger.info("Generating UK company instructions...")
+    for company in uk_companies:
+        company_instructions = generate_uk_company_instructions(company)
         all_instructions.extend(company_instructions)
-    
-    logger.info("Generating comparison instructions...")
-    comparison_instructions = generate_comparison_instructions(corporate_data)
+
+    logger.info("Generating UK comparison instructions...")
+    comparison_instructions = generate_uk_comparison_instructions(uk_companies)
     all_instructions.extend(comparison_instructions)
 
-    
     # Add metadata to each instruction
     for instruction in all_instructions:
         instruction['generated_at'] = datetime.now().isoformat()
-        instruction['dataset_version'] = '1.0'
-    
+        instruction['dataset_version'] = '2.0'
+        instruction['data_source'] = 'uk_companies_house'
+
     logger.info(f"Generated {len(all_instructions)} instruction-response pairs")
     return all_instructions
 
@@ -373,34 +474,36 @@ def generate_dataset_statistics(instructions: List[Dict]) -> Dict:
 
 @pipeline
 def instruction_dataset_pipeline(
-    corporate_limit: int = 5,
-    output_path: str = "datasets/instruction_dataset.jsonl"
+    company_limit: int = 50,
+    output_path: str = "datasets/uk_companies_instruction_dataset.jsonl"
 ):
-    """Main pipeline for generating custom instruction dataset from corporate data."""
-    
-    # Fetch data from MongoDB
-    corporate_data = fetch_corporate_data(corporate_limit)
-    
+    """Main pipeline for generating instruction dataset from UK Companies House data."""
+
+    # Fetch UK companies from MongoDB
+    uk_companies = fetch_uk_companies(company_limit)
+
     # Generate instruction dataset
-    instructions = generate_instruction_dataset(corporate_data)
-    
+    instructions = generate_instruction_dataset(uk_companies)
+
     # Save dataset
     saved_path = save_instruction_dataset(instructions, output_path)
-    
+
     # Generate statistics
     stats = generate_dataset_statistics(instructions)
-    
-    # Log completion (without using len() on StepArtifact)
-    logger.info(f"Pipeline completed successfully.")
+
+    # Log completion
+    logger.info(f"UK Companies instruction dataset pipeline completed successfully.")
     logger.info(f"Dataset saved to: {saved_path}")
     logger.info(f"Statistics generated.")
-    
+
     return {
         "instructions_count": len(instructions) if hasattr(instructions, '__len__') else "Unknown",
         "saved_path": saved_path,
-        "statistics": stats
+        "statistics": stats,
+        "data_source": "uk_companies_house",
+        "pipeline_completed": True
     }
 
 
 if __name__ == "__main__":
-    instruction_dataset_pipeline() 
+    instruction_dataset_pipeline()
