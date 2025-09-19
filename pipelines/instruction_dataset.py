@@ -475,7 +475,7 @@ def generate_dataset_statistics(instructions: List[Dict]) -> Dict:
 @pipeline
 def instruction_dataset_pipeline(
     company_limit: int = 50,
-    output_path: str = "datasets/uk_companies_instruction_dataset.jsonl"
+    output_path: str = "../datasets/instruction_dataset.jsonl"
 ):
     """Main pipeline for generating instruction dataset from UK Companies House data."""
 
