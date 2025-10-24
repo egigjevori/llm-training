@@ -7,6 +7,7 @@ Generic chat interface with multiple response providers (Qdrant, Model, Hybrid R
 import os
 import sys
 import logging
+import argparse
 from typing import Optional, Dict, Any
 import time
 import random
@@ -16,7 +17,6 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.markdown import Markdown
 from rich.table import Table
-from rich.spinner import Spinner
 from rich.live import Live
 from rich.align import Align
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -68,7 +68,7 @@ class ChatSession:
     def display_banner(self):
         """Display the enhanced application banner with animations."""
         # Animated startup sequence
-        self._animate_startup()
+        ChatSession._animate_startup()
         
         # Enhanced banner with gradient colors and emojis
         banner_colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta']
@@ -97,7 +97,6 @@ class ChatSession:
         
         mode_info.add_row(f"{mode_emoji} Mode:", f"[bold bright_green]{self.mode.upper()}[/bold bright_green]")
         mode_info.add_row(f"{provider_emoji} Provider:", f"[bright_yellow]{self.provider.get_name()}[/bright_yellow]")
-        mode_info.add_row("🎮 Commands:", "[dim bright_white]/help, /mode, /history, /clear, /quit[/dim bright_white]")
         
         console.print(Panel(
             mode_info,
@@ -110,7 +109,8 @@ class ChatSession:
         # Add decorative separator
         console.print(Rule("[bright_cyan]🌟 Ready to Chat! 🌟[/bright_cyan]", style="bright_cyan"))
     
-    def _animate_startup(self):
+    @staticmethod
+    def _animate_startup():
         """Display animated startup sequence."""
         startup_messages = [
             "🔥 Initializing Chat CLI...",
@@ -169,16 +169,10 @@ class ChatSession:
                 message_index = int((frame_count // 8) % len(thinking_messages))
                 current_message = thinking_messages[message_index]
                 
-                # Create animated spinner with changing messages
-                spinner = Spinner(spinner_name, text=f"[{spinner_color}]{current_message}[/{spinner_color}]", style=spinner_color)
-                
                 # Add progress indicator dots
                 dots_count = (frame_count % 12) // 3
                 progress_dots = "." * (dots_count + 1) + " " * (3 - dots_count)
-                
-                # Create spinner display with text
-                spinner_display = Spinner(spinner_name, text=f"[{spinner_color}]{current_message}[/{spinner_color}]", style=spinner_color)
-                
+
                 # Create content with progress dots
                 full_content = Text()
                 full_content.append(current_message, style=spinner_color)
@@ -195,7 +189,8 @@ class ChatSession:
                 time.sleep(0.25)
                 frame_count += 1
     
-    def typewriter_effect(self, text: str, delay: float = 0.02, style: str = "bright_white"):
+    @staticmethod
+    def typewriter_effect(text: str, delay: float = 0.02, style: str = "bright_white"):
         """Display text with typewriter effect."""
         if len(text) > 200:  # Skip typewriter for very long text
             return Text(text, style=style)
@@ -210,7 +205,8 @@ class ChatSession:
         
         return Text(text, style=style)
     
-    def show_transition_effect(self, message: str = "Processing..."):
+    @staticmethod
+    def show_transition_effect(message: str = "Processing..."):
         """Show a brief transition effect."""
         transition_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         
@@ -234,7 +230,7 @@ class ChatSession:
                     content = Markdown(response)
                 else:
                     content = Text(response, style="bright_white")
-            except:
+            except Exception:
                 content = Text(response, style="bright_white")
         else:
             content = Text(f"{random.choice(ERROR_EMOJIS)} No response generated.", style="dim red")
@@ -291,105 +287,10 @@ class ChatSession:
             title=title,
             subtitle=footer,
             border_style=config['border'],
-            padding=(1, 2),
+            padding=(1, 1),
             box=box.ROUNDED
         )
     
-    def handle_command(self, command: str) -> bool:
-        """Handle special commands. Returns True to continue, False to quit."""
-        command = command.lower().strip()
-        
-        if command in ['/quit', '/exit', '/q']:
-            farewell_messages = [
-                f"{random.choice(SUCCESS_EMOJIS)} Thanks for chatting! See you next time!",
-                f"🚀 Thanks for using Chat CLI! Have a great day!",
-                f"✨ Chat session completed! Until next time!",
-                f"🌟 Goodbye! Keep exploring and asking questions!"
-            ]
-            console.print(f"\n[bold bright_cyan]{random.choice(farewell_messages)}[/bold bright_cyan]\n")
-            return False
-            
-        elif command == '/help':
-            help_table = Table.grid(padding=1)
-            help_table.add_column(style="bold bright_cyan", justify="right")
-            help_table.add_column()
-            
-            commands = [
-                ("❓ /help", "Show this help message"),
-                ("⚙️ /mode", "Display current mode information"),  
-                ("📜 /history", "Show conversation history"),
-                ("🗑️ /clear", "Clear conversation history"),
-                ("👋 /quit", "Exit the chat application")
-            ]
-            
-            for cmd, desc in commands:
-                help_table.add_row(cmd, desc)
-            
-            console.print(Panel(
-                help_table,
-                title="[bold bright_magenta]🎮 Available Commands 🎮[/bold bright_magenta]",
-                border_style="bright_cyan",
-                box=box.ROUNDED
-            ))
-            
-        elif command == '/mode':
-            mode_table = Table.grid(padding=1)
-            mode_table.add_column(style="bold bright_blue", justify="right")
-            mode_table.add_column()
-            
-            # Enhanced mode display with emojis
-            mode_emoji = "🤖" if self.mode == "model" else "🔍" if self.mode == "qdrant" else "⚡"
-            provider_emoji = "🧠" if "model" in self.provider.get_name().lower() else "📚"
-            
-            mode_table.add_row(f"{mode_emoji} Mode:", f"[bold bright_green]{self.mode.upper()}[/bold bright_green]")
-            mode_table.add_row(f"{provider_emoji} Provider:", f"[bright_yellow]{self.provider.get_name()}[/bright_yellow]")
-            
-            if hasattr(self.provider, 'collection_name'):
-                mode_table.add_row("📊 Collection:", f"[bright_cyan]{self.provider.collection_name}[/bright_cyan]")
-            
-            console.print(Panel(
-                mode_table,
-                title="[bold bright_blue]⚙️ Current Mode Info ⚙️[/bold bright_blue]",
-                border_style="bright_blue",
-                box=box.ROUNDED
-            ))
-            
-        elif command == '/history':
-            if not self.conversation_history:
-                console.print(f"[dim bright_yellow]📜 No conversation history yet. Start chatting! {random.choice(SUCCESS_EMOJIS)}[/dim bright_yellow]")
-            else:
-                history_content = []
-                for i, item in enumerate(self.conversation_history[-5:], 1):
-                    history_content.append(f"[bold bright_blue]💬 Q{i}:[/bold bright_blue] {item['query']}")
-                    response_preview = item['response'][:100] + ('...' if len(item['response']) > 100 else '')
-                    history_content.append(f"[bold bright_green]🤖 A{i}:[/bold bright_green] {response_preview}")
-                    history_content.append("")  # Add spacing
-                
-                history_panel = Panel(
-                    "\n".join(history_content),
-                    title="[bold bright_yellow]📜 Recent Conversation History 📜[/bold bright_yellow]",
-                    border_style="bright_yellow",
-                    box=box.ROUNDED
-                )
-                console.print(history_panel)
-                
-        elif command == '/clear':
-            self.conversation_history.clear()
-            console.clear()
-            self.display_banner()
-            clear_messages = [
-                f"{random.choice(SUCCESS_EMOJIS)} Conversation history cleared! Fresh start!",
-                f"🧹 All clean! Ready for new conversations!",
-                f"✨ History wiped! Let's start over!",
-                f"🗑️ Cleared! Time for new adventures!"
-            ]
-            console.print(f"[bright_green]{random.choice(clear_messages)}[/bright_green]")
-            
-        else:
-            console.print(f"[red]{random.choice(ERROR_EMOJIS)} Unknown command: {command}[/red]")
-            console.print("[dim bright_white]💡 Type /help for available commands[/dim bright_white]")
-        
-        return True
     
     def run(self):
         """Run the main chat loop."""
@@ -403,7 +304,7 @@ class ChatSession:
             "💫 Hello! Let's have an amazing conversation!"
         ]
         console.print(f"\n[bold bright_green]{random.choice(welcome_messages)}[/bold bright_green]")
-        console.print("[dim bright_white]💡 Type your questions or use commands like /help, /quit[/dim bright_white]\n")
+        console.print("[dim bright_white]💡 Type your questions (Ctrl+C twice to exit)[/dim bright_white]\n")
         
         try:
             while True:
@@ -426,11 +327,10 @@ class ChatSession:
                         console.print(f"[dim bright_cyan]{random.choice(encouragement)}[/dim bright_cyan]")
                         continue
                     
-                    # Handle commands
-                    if user_input.startswith('/'):
-                        if not self.handle_command(user_input):
-                            break
-                        continue
+                    # Exit on quit-like inputs
+                    if user_input.lower().strip() in ['quit', 'exit', 'q', 'bye']:
+                        console.print(f"\n[bold bright_cyan]{random.choice(SUCCESS_EMOJIS)} Thanks for chatting! Goodbye![/bold bright_cyan]\n")
+                        break
                     
                     # Process regular query
                     console.print()  # Add spacing
@@ -439,7 +339,7 @@ class ChatSession:
                     self.display_typing_animation(1.5)
                     
                     # Show transition effect
-                    self.show_transition_effect(f"Generating response {random.choice(LOADING_EMOJIS)}")
+                    ChatSession.show_transition_effect(f"Generating response {random.choice(LOADING_EMOJIS)}")
                     
                     # Get response from provider
                     try:
@@ -486,10 +386,10 @@ class ChatSession:
                     
                 except KeyboardInterrupt:
                     interrupt_messages = [
-                        "⚠️ Interrupted! Use /quit to exit gracefully",
-                        "🛑 Hold on! Type /quit to exit properly", 
-                        "⏸️ Paused! Use /quit for a clean exit",
-                        "🚨 Ctrl+C detected! Try /quit instead"
+                        "⚠️ Interrupted! Press Ctrl+C again to exit",
+                        "🛑 Interrupted! Press Ctrl+C again to exit",
+                        "⏸️ Interrupted! Press Ctrl+C again to exit",
+                        "🚨 Ctrl+C detected! Press again to exit"
                     ]
                     console.print(f"\n[bright_yellow]{random.choice(interrupt_messages)}[/bright_yellow]")
                     continue
@@ -522,40 +422,83 @@ class ChatSession:
 def main():
     """
     Beautiful Chat CLI Application
-    
+
     A generic chat interface supporting multiple response providers:
     - Qdrant: Vector search and retrieval
     - Model: Fine-tuned model inference
+    - Hybrid: Combined RAG + fine-tuned model (recommended)
     """
-    
-    # Configuration - modify these variables as needed
-    # mode = 'model'  # Options: 'qdrant' or 'model'
-    mode = 'qdrant'
+#
+#     # Parse command-line arguments
+#     parser = argparse.ArgumentParser(
+#         description='Chat CLI with multiple response providers',
+#         formatter_class=argparse.RawDescriptionHelpFormatter,
+#         epilog="""
+# Examples:
+#   %(prog)s --mode qdrant     # Vector search mode
+#   %(prog)s --mode model      # Fine-tuned model mode
+#   %(prog)s --mode hybrid     # Hybrid RAG mode (default)
+#         """
+#     )
+#     parser.add_argument(
+#         '--mode',
+#         type=str,
+#         choices=['qdrant', 'model', 'hybrid'],
+#         default='hybrid',
+#         help='Response provider mode (default: hybrid)'
+#     )
+#
+#     args = parser.parse_args()
+#     mode = args.mode
+    mode="hybrid"
+    mode="hybrid"
+    # Hybrid/Qdrant configuration
+    collection_name = 'uk_companies'
+    top_k = 3
+    use_context_threshold = 0.5  # Minimum similarity score to use context
 
-    # Qdrant configuration (for mode='qdrant')
-    # collection = 'corporate_data'
-    # top_k = 3
-    
-    # Model configuration (for mode='model') 
-    model_path = '../models/finetuned_model'
-    base_model = 'Qwen/Qwen2.5-1.5B-Instruct'
-    # temperature = 0.7
-    # max_tokens = 200
+    # Model configuration
+    # Use merged model (no PEFT required - faster and simpler)
+    model_path = '../models/distilgpt2_merged'
+    base_model = 'distilgpt2'  # Only used if use_merged=False
+    use_merged = True  # Set to True to use merged model, False for PEFT adapters
+
+    # Generation parameters
+    temperature = 0.3  # Controls randomness (0.0 = deterministic, 1.0 = very random)
+    max_new_tokens = 200  # Maximum number of tokens to generate
+    do_sample = True  # Use sampling (True) or greedy decoding (False)
     
     try:
         # Prepare provider parameters
         provider_kwargs = {}
-        
+
         if mode == 'qdrant':
             provider_kwargs.update({
-                'collection_name': 'corporate_data',  # collection
-                'top_k': 3  # top_k
+                'collection_name': collection_name,
+                'top_k': top_k
             })
-            
+
         elif mode == 'model':
             provider_kwargs.update({
                 'model_path': model_path,
-                'base_model': base_model
+                'base_model': base_model,
+                'use_merged': use_merged,
+                'temperature': temperature,
+                'max_new_tokens': max_new_tokens,
+                'do_sample': do_sample
+            })
+
+        elif mode == 'hybrid':
+            provider_kwargs.update({
+                'collection_name': collection_name,
+                'top_k': top_k,
+                'model_path': model_path,
+                'base_model': base_model,
+                'use_context_threshold': use_context_threshold,
+                'use_merged': use_merged,
+                'temperature': temperature,
+                'max_new_tokens': max_new_tokens,
+                'do_sample': do_sample
             })
         
         # Create provider

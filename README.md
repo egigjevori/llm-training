@@ -13,6 +13,7 @@ This project implements a comprehensive data processing pipeline system designed
 | **RAG Pipeline** | Vector embeddings | MongoDB Collections | Qdrant Vector DB |
 | **Instruction Dataset** | Training data generation | MongoDB Collections | JSONL Dataset |
 | **QLoRA Pipeline** | Model fine-tuning | Instruction datasets | Fine-tuned LLM |
+| **Chat CLI** | Interactive query interface | Qdrant + Fine-tuned Models | Interactive Responses |
 
 ### Data Flow Architecture
 
@@ -31,20 +32,28 @@ This project implements a comprehensive data processing pipeline system designed
 │           Document Storage (MongoDB)           │
 └────────────────────────────────────────────────┘
                        │
-                       ▼
-┌────────────────────────────────────────────────┐
-│        Vector Processing (RAG Pipeline)        │
-└────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌────────────────────────────────────────────────┐
-│      Instruction Dataset Generation            │
-└────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌────────────────────────────────────────────────┐
-│        Model Fine-tuning (QLoRA Pipeline)      │
-└────────────────────────────────────────────────┘
+              ┌────────┴────────┐
+              ▼                 ▼
+┌──────────────────────┐  ┌──────────────────────┐
+│  Vector Processing   │  │  Instruction Dataset │
+│   (RAG Pipeline)     │  │     Generation       │
+└──────────────────────┘  └──────────────────────┘
+              │                      │
+              │                      ▼
+              │           ┌─────────────────────┐
+              │           │  Model Fine-tuning  │
+              │           │  (QLoRA Pipeline)   │
+              │           └─────────────────────┘
+              │                      │
+              └──────────┬───────────┘
+                         ▼
+              ┌─────────────────────┐
+              │   Chat CLI          │
+              │  (Interactive UI)   │
+              │  • Qdrant Search    │
+              │  • Model Inference  │
+              │  • Hybrid RAG       │
+              └─────────────────────┘
 ```
 
 ### Key Features
@@ -337,6 +346,85 @@ Instruction Dataset → Model Preparation → Training → Evaluation → Infere
 
 ### Output
 Fine-tuned model with LoRA adapters, evaluation results, and inference pipeline optimized for UK business intelligence tasks.
+
+---
+
+## 6. Chat CLI Application Architecture
+
+### Purpose
+Provides an interactive, production-ready chat interface for querying UK Companies House data using vector search, fine-tuned models, or hybrid RAG approaches with a beautiful terminal UI.
+
+### Data Flow
+```
+User Query → Provider Selection → [Vector Search | Model Inference | Hybrid RAG] → Response Formatting → Rich UI Display
+```
+
+### Pipeline Steps
+
+#### 6.1 Provider Architecture
+- **ResponseProvider (ABC)**: Abstract base class for all response providers
+- **QdrantProvider**: Vector search-based responses using semantic similarity
+- **ModelProvider**: Direct inference using fine-tuned DistilGPT-2 model
+- **HybridProvider**: Combines RAG retrieval with model generation for context-aware responses
+
+#### 6.2 QdrantProvider Mode
+- Generate query embeddings using BAAI/bge-small-en-v1.5
+- Search Qdrant vector database for similar documents
+- Format and display top-K results with relevance scores
+- Extract company metadata (name, number, status, SIC codes, address)
+- Return structured responses with document snippets
+
+#### 6.3 ModelProvider Mode
+- Load fine-tuned model (merged or PEFT adapters)
+- Support for CPU, CUDA, and Apple Silicon (MPS)
+- Configurable generation parameters (temperature, max_tokens, sampling)
+- Format prompts using instruction-following template
+- Generate responses based on model's trained knowledge
+
+#### 6.4 HybridProvider Mode
+- **Step 1**: Retrieve context from Qdrant using semantic search
+- **Step 2**: Filter results by similarity threshold (default: 0.5)
+- **Step 3**: Format retrieved documents as context for the model
+- **Step 4**: Generate response using fine-tuned model with RAG context
+- **Step 5**: Combine metadata from both sources for comprehensive tracking
+- **Fallback**: Gracefully degrades to model-only if RAG fails
+
+#### 6.5 User Interface Features
+- Rich terminal UI with animated typing indicators
+- Color-coded response panels by source type
+- Markdown rendering for formatted responses
+- Conversation history tracking
+- Real-time metadata display (relevance scores, temperature, token counts)
+- Error handling with user-friendly messages
+
+
+### Output Data Structure
+
+**Response Format:**
+```json
+{
+  "response": "Generated or retrieved response text",
+  "source": "qdrant | model | hybrid",
+  "metadata": {
+    "collection": "uk_companies",
+    "results_found": 3,
+    "top_score": 0.85,
+    "temperature": 0.7,
+    "context_used": true,
+    "high_confidence_docs": 2
+  }
+}
+```
+
+### Integration with Pipeline Ecosystem
+
+- **Consumes RAG Pipeline Output**: Uses Qdrant vector database from Section 3
+- **Leverages QLoRA Pipeline Output**: Uses fine-tuned models from Section 5
+- **Connects to MongoDB**: Accesses parsed company data from Section 2
+- **End-to-End Demo**: Demonstrates practical application of all pipeline components
+
+### Output
+Interactive chat interface with multi-modal response capabilities, providing seamless access to UK Companies House data through vector search, AI generation, or hybrid RAG approaches.
 
 ---
 

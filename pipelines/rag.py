@@ -29,7 +29,7 @@ def initialize_qdrant() -> None:
         collections = ["uk_companies"]
 
         for collection_name in collections:
-            create_collection(collection_name, vector_size=384, recreate=True)
+            create_collection(collection_name, vector_size=1024, recreate=True)
 
     except Exception as e:
         logger.error(f"Error initializing Qdrant: {e}")

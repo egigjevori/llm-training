@@ -17,8 +17,7 @@ from datasets import Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
-    TrainingArguments,
-    BitsAndBytesConfig
+    TrainingArguments
 )
 from trl import SFTTrainer
 from peft import LoraConfig
@@ -29,14 +28,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SimpleConfig:
     """Simplified configuration for QLoRA fine-tuning."""
-    model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    dataset_path: str = "pipelines/datasets/instruction_dataset.jsonl"
+    model_name: str = "gpt2"
+    dataset_path: str = "./datasets/instruction_dataset.jsonl"
     output_dir: str = "models/finetuned_model"
-    learning_rate: float = 2e-4
-    num_epochs: int = 1
-    batch_size: int = 2
-    lora_r: int = 8
-    lora_alpha: int = 16
+    learning_rate: float = 3e-4  # Slightly higher learning rate
+    num_epochs: int = 3  # More epochs for better learning
+    batch_size: int = 4
+    lora_r: int = 16  # Higher rank for more parameters
+    lora_alpha: int = 32  # Higher alpha for more adaptation
     
 
 @step(enable_cache=False)
@@ -68,31 +67,34 @@ def setup_and_train(dataset: Dataset, config: SimpleConfig) -> str:
     import torch
     import platform
 
-    # Check if we can use 4-bit quantization (CUDA available)
-    use_quantization = torch.cuda.is_available()
-
-    if use_quantization:
-        logger.info("CUDA detected, using 4-bit quantization")
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype="float16",
-            bnb_4bit_use_double_quant=True,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            config.model_name,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-        )
+    # Determine best device for MacBook
+    if torch.backends.mps.is_available():
+        device = "mps"
+        device_map = None  # MPS doesn't support device_map
+        torch_dtype = torch.float32  # MPS doesn't support float16 for LayerNorm
+        logger.info("Using MPS (Metal Performance Shaders) for acceleration with float32")
+    elif torch.cuda.is_available():
+        device = "cuda"
+        device_map = "auto"
+        torch_dtype = torch.float16
+        logger.info("Using CUDA for acceleration")
     else:
-        logger.info("No CUDA detected, loading model without quantization")
-        model = AutoModelForCausalLM.from_pretrained(
-            config.model_name,
-            dtype=torch.float16 if platform.system() != "Darwin" else torch.float32,
-            device_map="auto" if platform.system() != "Darwin" else None,
-            trust_remote_code=True,
-        )
+        device = "cpu"
+        device_map = "cpu"
+        torch_dtype = torch.float32
+        logger.info("Using CPU (no acceleration available)")
+
+    logger.info(f"Loading model on {device}")
+    model = AutoModelForCausalLM.from_pretrained(
+        config.model_name,
+        dtype=torch_dtype,
+        device_map=device_map,
+        trust_remote_code=True,
+    )
+
+    # Move to device if using MPS
+    if device == "mps":
+        model = model.to(device)
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
@@ -103,22 +105,28 @@ def setup_and_train(dataset: Dataset, config: SimpleConfig) -> str:
         lora_alpha=config.lora_alpha,
         lora_dropout=0.1,
         bias="none",
-        target_modules=["q_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        target_modules=["c_attn", "c_proj"],
     )
 
-    # Training arguments
+    # Training arguments with device-specific optimizations
     training_args = TrainingArguments(
         output_dir=config.output_dir,
         num_train_epochs=config.num_epochs,
         per_device_train_batch_size=config.batch_size,
         learning_rate=config.learning_rate,
         logging_steps=10,
-        save_steps=100,
+        save_steps=50,  # Save more frequently
         eval_strategy="no",
-        warmup_steps=10,
+        warmup_steps=50,  # More warmup steps
+        weight_decay=0.01,  # Add weight decay for regularization
         lr_scheduler_type="cosine",
-        optim="adamw_torch" if not use_quantization else "paged_adamw_8bit",
+        optim="adamw_torch",
         report_to="none",
+        fp16=device == "cuda",  # Only enable fp16 for CUDA (not MPS due to Accelerate limitation)
+        dataloader_pin_memory=False if device == "mps" else True,  # MPS doesn't support pin_memory
+        use_cpu=device == "cpu",  # Use CPU when device is CPU
+        gradient_accumulation_steps=2,  # Effectively double batch size
+        max_grad_norm=1.0,  # Gradient clipping for stability
     )
 
     # Create trainer and train
@@ -146,28 +154,56 @@ def evaluate(model_path: str, config: SimpleConfig) -> Dict:
 
     logger.info("Loading model for evaluation")
 
+    # Determine device for evaluation
+    if torch.backends.mps.is_available():
+        device = "mps"
+        device_map = None
+        torch_dtype = torch.float32  # MPS doesn't support float16 for LayerNorm
+        logger.info("Using MPS for evaluation with float32")
+    elif torch.cuda.is_available():
+        device = "cuda"
+        device_map = "auto"
+        torch_dtype = torch.float16
+        logger.info("Using CUDA for evaluation")
+    else:
+        device = "cpu"
+        device_map = "cpu"
+        torch_dtype = torch.float32
+        logger.info("Using CPU for evaluation")
+
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     base_model = AutoModelForCausalLM.from_pretrained(
         config.model_name,
-        torch_dtype=torch.float16,
-        device_map="auto",
+        dtype=torch_dtype,
+        device_map=device_map,
         trust_remote_code=True,
     )
+
+    # Move to device if using MPS
+    if device == "mps":
+        base_model = base_model.to(device)
+
     model = PeftModel.from_pretrained(base_model, model_path)
     model.eval()
 
-    # Test examples
+    # Test examples relevant to your dataset
     test_cases = [
-        "What is the capital of France?",
-        "Explain machine learning in simple terms.",
-        "How do you make a paper airplane?"
+        "What is the company number for ! LTD?",
+        "What is the incorporation date of ALTAI CASHMERE LLC?",
+        "What type of company is a Private Limited Company?",
+        "In which town is a company with postcode HG1 1ND likely registered?",
+        "What does company status 'Active' mean?"
     ]
 
     results = []
     for instruction in test_cases:
         input_text = f"<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"
         inputs = tokenizer(input_text, return_tensors="pt", truncation=True, max_length=512)
+
+        # Move inputs to device
+        if device != "cpu":
+            inputs = {k: v.to(device) for k, v in inputs.items()}
 
         with torch.no_grad():
             outputs = model.generate(
@@ -199,12 +235,12 @@ def evaluate(model_path: str, config: SimpleConfig) -> Dict:
 
 @pipeline
 def qlora_finetuning_pipeline(
-    dataset_path: str = "pipelines/datasets/instruction_dataset.jsonl",
-    model_name: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    num_epochs: int = 3,
-    batch_size: int = 4,
+    dataset_path: str = "../datasets/instruction_dataset.jsonl",
+    model_name: str = "gpt2",
+    num_epochs: int = 1,
+    batch_size: int = 2,
     learning_rate: float = 2e-4,
-    output_dir: str = "models/finetuned_model"
+    output_dir: str = "../models/finetuned_model"
 ):
     """Simplified QLoRA fine-tuning pipeline."""
 
@@ -224,15 +260,11 @@ def qlora_finetuning_pipeline(
     # Step 2: Setup and train model
     model_path = setup_and_train(dataset, config)
 
-    # Step 3: Evaluate (optional)
-    evaluation_results = evaluate(model_path, config)
-
     logger.info("QLoRA fine-tuning completed!")
     logger.info(f"Model saved to: {model_path}")
 
     return {
-        "model_path": model_path,
-        "evaluation_results": evaluation_results
+        "model_path": model_path
     }
 
 

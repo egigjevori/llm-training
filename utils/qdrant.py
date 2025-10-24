@@ -20,7 +20,7 @@ def get_embedding_model() -> SentenceTransformer:
     global _embedding_model
     if _embedding_model is None:
         # Using smaller, faster model optimized for retrieval tasks
-        _embedding_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
+        _embedding_model = SentenceTransformer("BAAI/bge-large-en-v1.5")
     return _embedding_model
 
 
